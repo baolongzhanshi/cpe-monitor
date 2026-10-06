@@ -30,9 +30,11 @@ try {
         if ($appProcess.MainWindowHandle -ne 0) { break }
         Start-Sleep -Milliseconds 500
     }
+    Write-Output "关闭前：进程=$($appProcess.Id)，窗口=$($appProcess.MainWindowHandle)，已退出=$($appProcess.HasExited)"
     if (-not $appProcess.CloseMainWindow()) { throw '未能关闭测试窗口' }
     Start-Sleep -Seconds 3
     $appProcess.Refresh()
+    Write-Output "关闭后：进程=$($appProcess.Id)，窗口=$($appProcess.MainWindowHandle)，已退出=$($appProcess.HasExited)"
     if ($appProcess.HasExited -or $appProcess.MainWindowHandle -ne 0) { throw '托盘后台状态验收失败' }
     $backgroundHealth = Invoke-RestMethod 'http://127.0.0.1:3210/api/system/health' -TimeoutSec 5
     if ($backgroundHealth.status -ne 'ok') { throw '关闭窗口后后台服务停止' }

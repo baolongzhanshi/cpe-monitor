@@ -47,6 +47,7 @@ jobs:
         shell: pwsh
         run: ./scripts/test-desktop.ps1
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: CPEye-Windows-installer
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
