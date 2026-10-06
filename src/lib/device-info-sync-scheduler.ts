@@ -5,6 +5,7 @@
  * this module only contains device-info-specific business logic.
  */
 import { initializeDatabase } from './db';
+import { isCpeConfigured } from './settings-store';
 import {
   collectDeviceInfo,
   type DeviceInfoCollectionResult,
@@ -23,6 +24,7 @@ const scheduler = createIntervalScheduler({
   defaultInterval: DEVICE_INFO_SYNC_DEFAULT_INTERVAL,
   minInterval: DEVICE_INFO_SYNC_MIN_INTERVAL,
   maxInterval: DEVICE_INFO_SYNC_MAX_INTERVAL,
+  shouldRun: isCpeConfigured,
   task: (source) => performDeviceInfoSync(source),
 });
 

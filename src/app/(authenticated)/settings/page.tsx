@@ -23,6 +23,7 @@ import { WechatNotificationSection } from '@/components/settings/WechatNotificat
 import { PushplusNotificationSection } from '@/components/settings/PushplusNotificationSection';
 import { ThemeColorSection } from '@/components/settings/ThemeColorSection';
 import { useSettingsPage } from '@/hooks/useSettingsPage';
+import { formatSyncInterval } from '@/lib/sync-interval';
 
 export default function SettingsPage() {
   const settings = useSettingsPage();
@@ -77,7 +78,7 @@ export default function SettingsPage() {
           {
             label: '短信自动化',
             value: settings.smsSyncConfig.enabled
-              ? `每 ${settings.smsSyncConfig.interval} 分钟`
+              ? `每 ${formatSyncInterval(settings.smsSyncConfig.interval)}`
               : '已暂停',
             detail: settings.smsSyncConfig.running ? '后台任务运行中' : '当前没有运行',
             icon: <Workflow className="h-3.5 w-3.5" />,

@@ -1,4 +1,5 @@
 import { createSyncSettingsRoute } from '@/lib/sync-route-factory';
+import { SMS_SYNC_INTERVAL_ERROR } from '@/lib/sync-interval';
 import {
   getSmsSyncStatus,
   isValidSmsSyncInterval,
@@ -12,6 +13,7 @@ export const { GET, POST } = createSyncSettingsRoute({
   intervalKey: 'sms_sync_interval',
   minInterval: SMS_SYNC_MIN_INTERVAL,
   maxInterval: SMS_SYNC_MAX_INTERVAL,
+  intervalValidationMessage: SMS_SYNC_INTERVAL_ERROR,
   getStatus: getSmsSyncStatus,
   isValidInterval: isValidSmsSyncInterval,
   restart: restartSmsScheduler,

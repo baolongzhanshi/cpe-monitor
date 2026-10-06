@@ -23,6 +23,7 @@ export interface SyncSettingsRouteOptions {
   intervalKey: string;
   minInterval: number;
   maxInterval: number;
+  intervalValidationMessage?: string;
   getStatus: () => SyncStatus;
   isValidInterval: (value: unknown) => value is number;
   restart: () => Promise<SyncStatus>;
@@ -38,6 +39,7 @@ export function createSyncSettingsRoute(options: SyncSettingsRouteOptions) {
     intervalKey,
     minInterval,
     maxInterval,
+    intervalValidationMessage,
     getStatus,
     isValidInterval,
     restart,
@@ -57,7 +59,7 @@ export function createSyncSettingsRoute(options: SyncSettingsRouteOptions) {
     const body = await parseJsonBody<{ enabled?: boolean; interval?: number }>(request);
     if (typeof body.enabled !== 'boolean' || !isValidInterval(body.interval)) {
       throw new ApiError(
-        `同步间隔必须是 ${minInterval} 到 ${maxInterval} 之间的整数分钟`,
+        intervalValidationMessage || `同步间隔必须是 ${minInterval} 到 ${maxInterval} 之间的整数分钟`,
         400,
       );
     }

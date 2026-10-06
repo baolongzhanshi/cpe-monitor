@@ -57,21 +57,15 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4 sm:p-6">
-      {/* Floating ambient orbs */}
-      <motion.div
+      {/* 静态背景装饰，避免页面空闲时持续渲染动画。 */}
+      <div
         className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-brand/10 blur-3xl"
-        animate={reduce ? undefined : { x: [0, 30, -10, 0], y: [0, -20, 15, 0], scale: [1, 1.08, 0.96, 1] }}
-        transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }}
       />
-      <motion.div
+      <div
         className="absolute -right-32 bottom-1/4 h-96 w-96 rounded-full bg-info/10 blur-3xl"
-        animate={reduce ? undefined : { x: [0, -25, 12, 0], y: [0, 18, -14, 0], scale: [1, 0.94, 1.06, 1] }}
-        transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
       />
-      <motion.div
+      <div
         className="absolute left-1/2 top-1/3 h-64 w-64 -translate-x-1/2 rounded-full bg-brand/5 blur-3xl"
-        animate={reduce ? undefined : { y: [0, 30, 0], scale: [1, 1.2, 1] }}
-        transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
       />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent" />
 
@@ -87,13 +81,11 @@ export default function LoginPage() {
       >
         <Card className="border-white/80 bg-card/90 backdrop-blur-xl dark:border-border">
           <CardHeader className="space-y-3 text-center">
-            <motion.span
+            <span
               className="mx-auto inline-flex size-14 items-center justify-center rounded-2xl bg-brand text-primary-foreground shadow-lg shadow-brand/20"
-              animate={reduce ? undefined : { rotate: [0, -6, 6, 0] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 3 }}
             >
               <RadioTower className="h-6 w-6" />
-            </motion.span>
+            </span>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-brand/70">CPE monitor</p>
             <CardTitle className="bg-gradient-to-r from-brand to-info bg-clip-text text-3xl font-bold tracking-tight text-transparent">
               CPEye

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { toSqliteTimestamp } from './date-time.ts';
+import { SMS_SYNC_INTERVAL } from './sync-interval.ts';
 
 export interface SqliteRunResult {
   changes: number;
@@ -260,7 +261,7 @@ const migrations: Array<{ version: number; migrate: Migration }> = [
         ['scheduler_enabled', 'false'],
         ['scheduler_interval', '60'],
         ['sms_sync_enabled', 'true'],
-        ['sms_sync_interval', '15'],
+        ['sms_sync_interval', String(SMS_SYNC_INTERVAL.defaultInterval)],
         ['sms_initial_sync_completed', 'false'],
         ['sms_last_sync_at', ''],
         ['sms_last_sync_error', ''],

@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/lib/client-api';
 import { formatSyncTime } from '@/lib/format';
+import { formatSyncInterval } from '@/lib/sync-interval';
 
 interface SmsMessage {
   id: string;
@@ -220,7 +221,7 @@ export default function SmsPage() {
           },
           {
             label: '同步策略',
-            value: sync?.enabled ? `每 ${sync.interval} 分钟` : '已暂停',
+            value: sync?.enabled ? `每 ${formatSyncInterval(sync.interval)}` : '已暂停',
             detail: sync?.running ? '后台运行中' : '等待下一次同步',
             icon: <ShieldCheck className="h-3.5 w-3.5" />,
             chart: (

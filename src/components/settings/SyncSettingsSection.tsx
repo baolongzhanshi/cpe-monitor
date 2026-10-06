@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { formatSyncTime } from '@/lib/format';
+import { formatSyncInterval } from '@/lib/sync-interval';
 import type { SyncConfigForm } from '@/features/settings/types';
 
 export interface SyncSettingsSectionProps {
@@ -28,6 +29,8 @@ export interface SyncSettingsSectionProps {
   /** Interval input constraints */
   min: number;
   max: number;
+  // 配置始终以分钟存储，短信表单使用秒展示和输入。
+  intervalUnit?: 'minutes' | 'seconds';
   hint: string;
   /** Switch row description */
   switchDescription: string;
@@ -55,6 +58,7 @@ export function SyncSettingsSection({
   onSave,
   min,
   max,
+  intervalUnit = 'minutes',
   hint,
   switchDescription,
   switchAriaLabel,
@@ -65,6 +69,10 @@ export function SyncSettingsSection({
   syncNowLoadingLabel = '同步中…',
 }: SyncSettingsSectionProps) {
   const busy = saving || syncing;
+  const intervalMultiplier = intervalUnit === 'seconds' ? 60 : 1;
+  const displayedInterval = config.interval === ''
+    ? ''
+    : String(Math.round(Number(config.interval) * intervalMultiplier * 1000000) / 1000000);
 
   return (
     <SettingsAccordionSection
@@ -82,7 +90,7 @@ export function SyncSettingsSection({
       }
       summary={[
         { label: '自动同步', value: config.enabled ? '已启用' : '已暂停' },
-        { label: '同步间隔', value: `每 ${config.interval} 分钟` },
+        { label: '同步间隔', value: `每 ${formatSyncInterval(config.interval)}` },
         { label: '最近同步', value: formatSyncTime(config.lastSyncedAt) },
         { label: '最近错误', value: config.lastError || '无' },
       ]}
@@ -99,15 +107,18 @@ export function SyncSettingsSection({
           aria-label={switchAriaLabel}
         />
       </div>
-      <FieldGroup label="同步间隔（分钟）" hint={hint}>
+      <FieldGroup label={`同步间隔（${intervalUnit === 'seconds' ? '秒' : '分钟'}）`} hint={hint}>
         <Input
           className="h-9 rounded-lg bg-background/60"
           type="number"
-          min={String(min)}
-          max={String(max)}
-          step="1"
-          value={config.interval}
-          onChange={(event) => setConfig({ ...config, interval: event.target.value })}
+          min={String(min * intervalMultiplier)}
+          max={String(max * intervalMultiplier)}
+          step={intervalUnit === 'seconds' ? 'any' : '1'}
+          value={displayedInterval}
+          onChange={(event) => setConfig({
+            ...config,
+            interval: event.target.value === '' ? '' : String(Number(event.target.value) / intervalMultiplier),
+          })}
         />
       </FieldGroup>
       {config.lastError ? (

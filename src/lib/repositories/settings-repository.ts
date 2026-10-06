@@ -31,7 +31,8 @@ export function upsertSystemSetting(key: string, value: string): void {
   db.prepare(
     `INSERT INTO system_settings (key, value)
      VALUES (?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value
+     WHERE system_settings.value <> excluded.value`,
   ).run(key, value);
 }
 

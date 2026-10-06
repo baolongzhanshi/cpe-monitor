@@ -9,7 +9,7 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, WindowEvent,
+    AppHandle, Manager, WebviewWindowBuilder, WindowEvent,
 };
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -24,6 +24,7 @@ fn boxed_error(error: impl std::fmt::Display) -> Box<dyn std::error::Error> {
 struct AppState {
     sidecar: Mutex<Option<Child>>,
     exiting: AtomicBool,
+    opening_window: AtomicBool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -128,7 +129,28 @@ fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
+        return;
     }
+    let state = app.state::<AppState>();
+    if state.opening_window.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let handle = app.clone();
+    // Windows 创建 WebView 必须离开同步事件回调，避免阻塞主事件循环。
+    std::thread::spawn(move || {
+        let result = handle.config().app.windows.iter()
+            .find(|config| config.label == "main")
+            .ok_or_else(|| boxed_error("缺少主窗口配置"))
+            .and_then(|config| {
+                WebviewWindowBuilder::from_config(&handle, config)
+                    .map_err(boxed_error)?.build().map_err(boxed_error)
+            });
+        match result {
+            Ok(window) => { let _ = window.set_focus(); }
+            Err(error) => eprintln!("重新打开主窗口失败: {error}"),
+        }
+        handle.state::<AppState>().opening_window.store(false, Ordering::SeqCst);
+    });
 }
 
 pub fn run() {
@@ -140,6 +162,7 @@ pub fn run() {
         .manage(AppState {
             sidecar: Mutex::new(None),
             exiting: AtomicBool::new(false),
+            opening_window: AtomicBool::new(false),
         })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().map_err(boxed_error)?;
@@ -176,15 +199,20 @@ pub fn run() {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 let state = window.state::<AppState>();
                 if !state.exiting.load(Ordering::SeqCst) {
-                    // 关闭窗口只隐藏到托盘，后台同步继续运行。
+                    // 释放整个 WebView，托盘和 Node 同步服务继续运行。
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = window.destroy();
                 }
             }
         })
         .build(tauri::generate_context!())
         .expect("启动 CPEye 桌面端失败")
         .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = &event {
+                if !app.state::<AppState>().exiting.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                }
+            }
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = app.try_state::<AppState>() {
                     if let Ok(mut child) = state.sidecar.lock() {

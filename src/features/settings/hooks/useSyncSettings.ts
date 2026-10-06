@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/client-api';
+import { isValidSyncInterval } from '@/lib/sync-interval';
 import type { SettingsActionContext, SyncConfigForm } from '../types';
 
 interface SyncSettingsResponse {
@@ -18,6 +19,9 @@ export interface UseSyncSettingsOptions {
   defaultInterval: number;
   min: number;
   max: number;
+  // 默认整数分钟；短信允许小数分钟，以便使用秒级轮询。
+  allowFractionalInterval?: boolean;
+  intervalValidationMessage?: string;
   /** Human-readable label for messages, e.g. '短信自动同步' */
   label: string;
   /** Optional endpoint for manual sync-now action */
@@ -43,6 +47,8 @@ export function useSyncSettings(options: UseSyncSettingsOptions) {
     defaultInterval,
     min,
     max,
+    allowFractionalInterval = false,
+    intervalValidationMessage,
     label,
     syncNowEndpoint,
     syncNowSuccessMessage,
@@ -80,10 +86,10 @@ export function useSyncSettings(options: UseSyncSettingsOptions) {
 
   const save = useCallback(async () => {
     const interval = Number(config.interval);
-    if (!Number.isInteger(interval) || interval < min || interval > max) {
+    if (!isValidSyncInterval(interval, { minInterval: min, maxInterval: max, allowFractionalInterval })) {
       context.onMessage({
         type: 'error',
-        text: `${label}间隔必须是 ${min} 到 ${max} 之间的整数分钟`,
+        text: intervalValidationMessage || `${label}间隔必须是 ${min} 到 ${max} 之间的整数分钟`,
       });
       return;
     }
@@ -102,7 +108,7 @@ export function useSyncSettings(options: UseSyncSettingsOptions) {
     } finally {
       setSaving(false);
     }
-  }, [context, config.enabled, config.interval, endpoint, label, min, max]);
+  }, [context, config.enabled, config.interval, endpoint, label, min, max, allowFractionalInterval, intervalValidationMessage]);
 
   const syncNow = useCallback(async () => {
     if (!syncNowEndpoint) return;

@@ -10,13 +10,14 @@ import { getOrCreateCpeClient } from './cpe-client';
 import { sendSmsNotification } from './notifiers/email';
 import { sendSmsWechat } from './notifiers/wechat';
 import { sendPushplusSms } from './notifiers/pushplus';
-import { getSettingsMap, readNotificationConfig, setSetting } from './settings-store';
+import { getSettingsMap, isCpeConfigured, readNotificationConfig, setSetting } from './settings-store';
 import { createIntervalScheduler, type SyncStatus } from './interval-scheduler';
 import { hasStoredSmsChanged, type ExistingSmsRecord } from './sms-sync-utils';
+import { SMS_SYNC_INTERVAL } from './sync-interval';
 
-export const SMS_SYNC_MIN_INTERVAL = 1;
-export const SMS_SYNC_MAX_INTERVAL = 1440;
-export const SMS_SYNC_DEFAULT_INTERVAL = 1;
+export const SMS_SYNC_MIN_INTERVAL = SMS_SYNC_INTERVAL.minInterval;
+export const SMS_SYNC_MAX_INTERVAL = SMS_SYNC_INTERVAL.maxInterval;
+export const SMS_SYNC_DEFAULT_INTERVAL = SMS_SYNC_INTERVAL.defaultInterval;
 
 export type SmsSyncStatus = SyncStatus;
 
@@ -35,6 +36,8 @@ const scheduler = createIntervalScheduler({
   defaultInterval: SMS_SYNC_DEFAULT_INTERVAL,
   minInterval: SMS_SYNC_MIN_INTERVAL,
   maxInterval: SMS_SYNC_MAX_INTERVAL,
+  allowFractionalInterval: true,
+  shouldRun: isCpeConfigured,
   task: () => performSmsSync(),
 });
 

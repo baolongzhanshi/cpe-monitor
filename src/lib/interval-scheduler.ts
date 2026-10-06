@@ -12,6 +12,12 @@
 import { initializeDatabase } from './db';
 import { getSettingsMap, setSetting } from './settings-store';
 import { getErrorMessage } from './error-utils';
+import {
+  formatSyncInterval,
+  isValidSyncInterval,
+  parseSyncInterval,
+  syncIntervalMilliseconds,
+} from './sync-interval';
 
 export interface SyncStatus {
   enabled: boolean;
@@ -29,6 +35,10 @@ export interface IntervalSchedulerOptions {
   defaultInterval: number;
   minInterval: number;
   maxInterval: number;
+  // 仅短信等需要秒级轮询的任务允许小数分钟，默认仍限制整数分钟。
+  allowFractionalInterval?: boolean;
+  // 未完成设备配置时跳过自动轮询，避免反复报错或发起网络请求。
+  shouldRun?: () => boolean;
   /** The actual sync task to execute */
   task: (source: 'scheduler' | 'manual') => Promise<unknown>;
 }
@@ -52,6 +62,8 @@ export function createIntervalScheduler(options: IntervalSchedulerOptions): Inte
     defaultInterval,
     minInterval,
     maxInterval,
+    allowFractionalInterval = false,
+    shouldRun,
     task,
   } = options;
 
@@ -64,9 +76,7 @@ export function createIntervalScheduler(options: IntervalSchedulerOptions): Inte
   const lastSyncErrorKey = `${settingPrefix}_last_sync_error`;
 
   function parseInterval(value: string | undefined): number {
-    const interval = Number(value || defaultInterval);
-    if (!Number.isInteger(interval)) return defaultInterval;
-    return Math.min(maxInterval, Math.max(minInterval, interval));
+    return parseSyncInterval(value, defaultInterval, { minInterval, maxInterval, allowFractionalInterval });
   }
 
   function updateMetadata(lastSyncedAt: string | null, lastError: string | null): void {
@@ -87,14 +97,12 @@ export function createIntervalScheduler(options: IntervalSchedulerOptions): Inte
   }
 
   function isValidInterval(value: unknown): value is number {
-    return typeof value === 'number'
-      && Number.isInteger(value)
-      && value >= minInterval
-      && value <= maxInterval;
+    return isValidSyncInterval(value, { minInterval, maxInterval, allowFractionalInterval });
   }
 
   async function runScheduled(): Promise<void> {
     try {
+      if (shouldRun && !shouldRun()) return;
       await sync('scheduler');
     } catch (error) {
       console.error(`Failed to run scheduled ${name}:`, error);
@@ -113,9 +121,9 @@ export function createIntervalScheduler(options: IntervalSchedulerOptions): Inte
 
     timerTask = setInterval(() => {
       void runScheduled();
-    }, status.interval * 60 * 1000);
+    }, syncIntervalMilliseconds(status.interval));
 
-    console.log(`${name} scheduler started with interval: ${status.interval} minutes`);
+    console.log(`${name} scheduler started with interval: ${formatSyncInterval(status.interval)}`);
     void runScheduled();
     return getStatus();
   }

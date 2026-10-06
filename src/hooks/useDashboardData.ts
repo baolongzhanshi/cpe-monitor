@@ -3,6 +3,7 @@
 import { useCallback, useState } from 'react';
 import { apiFetch } from '@/lib/client-api';
 import { formatLocalTime, getSignalQuality, getUpdateStateLabel } from '@/lib/format';
+import { formatSyncInterval } from '@/lib/sync-interval';
 import { useTrafficHistory } from './useTrafficHistory';
 import { useLiveMetrics } from './useLiveMetrics';
 import { useSchedulerControl } from './useSchedulerControl';
@@ -94,7 +95,7 @@ export function useDashboardData() {
     deviceSnapshot?.deviceInformation,
     ['DeviceName', 'spreadname_zh', 'spreadname_en'],
   );
-  const smsSyncLabel = smsSync?.enabled ? `每 ${smsSync.interval} 分钟` : '已暂停';
+  const smsSyncLabel = smsSync?.enabled ? `每 ${formatSyncInterval(smsSync.interval)}` : '已暂停';
   const smsSyncDetail = smsSync?.lastError
     ? '最近同步失败'
     : smsSync?.lastSyncedAt
