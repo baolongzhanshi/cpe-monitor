@@ -201,6 +201,11 @@ pub fn run() {
                 if !state.exiting.load(Ordering::SeqCst) {
                     // 释放整个 WebView，托盘和 Node 同步服务继续运行。
                     api.prevent_close();
+                    // 先关闭 WebView 控制器，避免它继续持有原生窗口资源。
+                    if let Some(webview_window) = window.get_webview_window("main") {
+                        let webview: &tauri::Webview = webview_window.as_ref();
+                        let _ = webview.close();
+                    }
                     let _ = window.destroy();
                 }
             }
