@@ -2,7 +2,8 @@ use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
     fs,
-    path::Path,
+    path::{Path, PathBuf},
+    process::{Child, Command, Stdio},
     sync::{atomic::{AtomicBool, Ordering}, Mutex},
 };
 use tauri::{
@@ -10,7 +11,8 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Manager, WindowEvent,
 };
-use tauri_plugin_shell::{process::CommandChild, ShellExt};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 const SERVER_PORT: u16 = 3210;
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
@@ -20,7 +22,7 @@ fn boxed_error(error: impl std::fmt::Display) -> Box<dyn std::error::Error> {
 }
 
 struct AppState {
-    sidecar: Mutex<Option<CommandChild>>,
+    sidecar: Mutex<Option<Child>>,
     exiting: AtomicBool,
 }
 
@@ -38,6 +40,18 @@ fn random_secret(length: usize) -> String {
         .take(length)
         .map(char::from)
         .collect()
+}
+
+fn runtime_path(path: &Path) -> PathBuf {
+    // Windows 规范化路径可能带扩展前缀，转换为 Node CLI 能稳定解析的路径。
+    let text = path.to_string_lossy();
+    if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{}", unc))
+    } else if let Some(normal) = text.strip_prefix(r"\\?\") {
+        PathBuf::from(normal)
+    } else {
+        path.to_path_buf()
+    }
 }
 
 fn load_or_create_secrets(app_data_dir: &Path) -> AppResult<(RuntimeSecrets, bool)> {
@@ -60,8 +74,8 @@ fn load_or_create_secrets(app_data_dir: &Path) -> AppResult<(RuntimeSecrets, boo
     Ok((secrets, true))
 }
 
-fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path) -> AppResult<CommandChild> {
-    let resource_dir = app.path().resource_dir().map_err(boxed_error)?;
+fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path) -> AppResult<Child> {
+    let resource_dir = runtime_path(&app.path().resource_dir().map_err(boxed_error)?);
     let server_path = resource_dir.join("resources").join("server").join("server.js");
     if !server_path.exists() {
         return Err(boxed_error(format!("找不到内置服务: {}", server_path.display())));
@@ -69,11 +83,11 @@ fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path)
 
     let database_path = app_data_dir.join("data").join("cpe-monitor.db");
     let first_run_path = app_data_dir.join("first-run-password.txt");
-    let command = app
-        .shell()
-        .sidecar("node")
-        .map_err(boxed_error)?
-        .args([server_path.to_string_lossy().to_string()])
+    let node_path = resource_dir.join(if cfg!(windows) { "node.exe" } else { "node" });
+    let mut command = Command::new(node_path);
+    command
+        .arg(&server_path)
+        .current_dir(server_path.parent().ok_or_else(|| boxed_error("服务目录无效"))?)
         .env("NODE_ENV", "production")
         .env("HOSTNAME", "127.0.0.1")
         .env("PORT", SERVER_PORT.to_string())
@@ -82,13 +96,31 @@ fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path)
         .env("ADMIN_PASSWORD", &secrets.admin_password)
         .env("JWT_SECRET", &secrets.jwt_secret)
         .env("CPE_CONFIG_SECRET", &secrets.cpe_config_secret)
-        .env("CPE_SESSION_SECRET", &secrets.cpe_session_secret);
-
-    let (mut events, child) = command.spawn().map_err(boxed_error)?;
-    // 持续消费子进程输出，避免 stdout/stderr 管道积压阻塞服务。
-    tauri::async_runtime::spawn(async move {
-        while events.recv().await.is_some() {}
-    });
+        .env("CPE_SESSION_SECRET", &secrets.cpe_session_secret)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null());
+    // 只记录错误，单次进程最多保留 64 KiB，避免长期运行日志占满磁盘。
+    command.stderr(Stdio::piped());
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let mut child = command.spawn().map_err(boxed_error)?;
+    if let Some(mut stderr) = child.stderr.take() {
+        let log_path = app_data_dir.join("startup-error.log");
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            let mut log = fs::File::create(log_path).ok();
+            let mut total = 0;
+            let mut buffer = [0u8; 4096];
+            while let Ok(count) = stderr.read(&mut buffer) {
+                if count == 0 { break; }
+                let retained = count.min(65536usize.saturating_sub(total));
+                if retained > 0 {
+                    if let Some(file) = log.as_mut() { let _ = file.write_all(&buffer[..retained]); }
+                    total += retained;
+                }
+            }
+        });
+    }
     Ok(child)
 }
 
@@ -105,7 +137,6 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
         }))
-        .plugin(tauri_plugin_shell::init())
         .manage(AppState {
             sidecar: Mutex::new(None),
             exiting: AtomicBool::new(false),
@@ -157,8 +188,9 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 if let Some(state) = app.try_state::<AppState>() {
                     if let Ok(mut child) = state.sidecar.lock() {
-                        if let Some(child) = child.take() {
+                        if let Some(mut child) = child.take() {
                             let _ = child.kill();
+                            let _ = child.wait();
                         }
                     }
                 }

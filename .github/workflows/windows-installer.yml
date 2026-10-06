@@ -22,6 +22,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
@@ -40,6 +43,9 @@ jobs:
           CPE_CONFIG_SECRET: build-only-config-secret-change-at-runtime
         run: npm run build:desktop
       - run: npx --yes @tauri-apps/cli@2 build
+      - name: 安装并启动验收
+        shell: pwsh
+        run: ./scripts/test-desktop.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: CPEye-Windows-installer

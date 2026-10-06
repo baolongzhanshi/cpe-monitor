@@ -3,13 +3,5 @@
   "identifier": "default",
   "description": "CPEye 桌面端默认权限",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        { "name": "binaries/node", "sidecar": true }
-      ]
-    }
-  ]
+  "permissions": ["core:default"]
 }
