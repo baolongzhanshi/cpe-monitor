@@ -12,7 +12,7 @@ public static class CpeSmokeWindows {
 }
 '@
 function Get-CpeMainWindow([int]$appProcessId) {
-    $handle = [CpeSmokeWindows]::FindWindow($null, 'CPEye 5G CPE 监控')
+    $handle = [CpeSmokeWindows]::FindWindow($null, $script:cpeWindowTitle)
     if ($handle -eq [IntPtr]::Zero) { return [IntPtr]::Zero }
     [uint32]$ownerId = 0
     [void][CpeSmokeWindows]::GetWindowThreadProcessId($handle, [ref]$ownerId)
@@ -46,12 +46,14 @@ try {
     $firstRun = Invoke-RestMethod 'http://127.0.0.1:3210/api/system/first-run-password' -TimeoutSec 5
     if ($login.StatusCode -ne 200 -or -not $firstRun.available) { throw '首次登录流程验收失败' }
     # 关闭页面后释放 WebView，后台服务保持原进程；再次运行只恢复窗口。
+    $script:cpeWindowTitle = $null
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
         $appProcess.Refresh()
-        if ((Get-CpeMainWindow $appProcess.Id) -ne [IntPtr]::Zero) { break }
+        if ($appProcess.MainWindowHandle -ne 0) { $script:cpeWindowTitle = $appProcess.MainWindowTitle; break }
         Start-Sleep -Milliseconds 500
     }
-    $originalWindow = Get-CpeMainWindow $appProcess.Id
+    $originalWindow = $appProcess.MainWindowHandle
+    Write-Output "检测到应用窗口标题：$script:cpeWindowTitle"
     if ($originalWindow -eq [IntPtr]::Zero) { throw '未找到应用主窗口' }
     Write-Output "关闭前：进程=$($appProcess.Id)，窗口=$($appProcess.MainWindowHandle)，已退出=$($appProcess.HasExited)"
     if (-not $appProcess.CloseMainWindow()) { throw '未能关闭测试窗口' }
