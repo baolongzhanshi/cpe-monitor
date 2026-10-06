@@ -31,7 +31,14 @@ jobs:
           Invoke-WebRequest -Uri "https://nodejs.org/dist/v24.14.0/node-v24.14.0-win-x64.zip" -OutFile $nodeZip
           Expand-Archive $nodeZip "$env:RUNNER_TEMP\node"
           "CPE_NODE_RUNTIME=$env:RUNNER_TEMP\node\node-v24.14.0-win-x64\node.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - run: npm run build:desktop
+      - name: 构建桌面资源
+        env:
+          # 仅用于 Next.js 构建期静态分析；安装后由 Tauri 首次启动生成真实密钥。
+          JWT_SECRET: build-only-jwt-secret-change-at-runtime
+          ADMIN_PASSWORD: build-only-admin-password
+          CPE_SESSION_SECRET: build-only-session-secret-change-at-runtime
+          CPE_CONFIG_SECRET: build-only-config-secret-change-at-runtime
+        run: npm run build:desktop
       - run: npx --yes @tauri-apps/cli@2 build
       - uses: actions/upload-artifact@v4
         with:
