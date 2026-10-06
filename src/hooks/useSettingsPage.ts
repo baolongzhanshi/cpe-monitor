@@ -23,6 +23,7 @@ export type {
   TestResultState,
   UpdateStatusState,
   WechatConfigForm,
+  PushplusConfigForm,
 } from '@/features/settings/types';
 
 export function useSettingsPage() {
@@ -46,7 +47,7 @@ export function useSettingsPage() {
     || deviceInfoSync.initialLoading
     || retention.initialLoading
     || quota.initialLoading;
-  const loading = cpe.saving || notifications.savingEmail || notifications.savingWechat;
+  const loading = cpe.saving || notifications.savingEmail || notifications.savingWechat || notifications.savingPushplus;
 
   const overviewMeta = useMemo(() => ({
     cpeConfigured: Boolean(cpe.cpeConfig.cpeUrl),
@@ -59,6 +60,7 @@ export function useSettingsPage() {
     emailHost: notifications.emailConfig.smtpHost,
     recipientCount: notifications.recipientCount,
     wechatConfigured: notifications.wechatConfigured,
+    pushplusConfigured: notifications.pushplusConfigured,
     wechatMasked: notifications.wechatConfig.webhookUrl
       ? maskSecret(notifications.wechatConfig.webhookUrl)
       : notifications.wechatWebhookSet ? '已安全保存' : '',

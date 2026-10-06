@@ -20,6 +20,7 @@ import { DataQuotaSection } from '@/components/settings/DataQuotaSection';
 import { DataBackupSection } from '@/components/settings/DataBackupSection';
 import { EmailNotificationSection } from '@/components/settings/EmailNotificationSection';
 import { WechatNotificationSection } from '@/components/settings/WechatNotificationSection';
+import { PushplusNotificationSection } from '@/components/settings/PushplusNotificationSection';
 import { ThemeColorSection } from '@/components/settings/ThemeColorSection';
 import { useSettingsPage } from '@/hooks/useSettingsPage';
 
@@ -38,7 +39,8 @@ export default function SettingsPage() {
     settings.cpeConfig.cpeUrl.trim() && settings.cpeConfig.cpeUsername.trim(),
   );
   const notificationConfiguredCount = Number(settings.emailConfigured)
-    + Number(settings.wechatConfigured);
+    + Number(settings.wechatConfigured)
+    + Number(settings.pushplusConfigured);
   const historyDays = Number.parseInt(settings.dataRetention.historyDays, 10) || 0;
   const runDays = Number.parseInt(settings.dataRetention.runDays, 10) || 0;
 
@@ -91,16 +93,17 @@ export default function SettingsPage() {
           },
           {
             label: '通知渠道',
-            value: `${notificationConfiguredCount} / 2`,
+            value: `${notificationConfiguredCount} / 3`,
             detail: settings.emailConfigured
               ? `邮件 ${settings.recipientCount} 个收件人`
-              : '邮件尚未配置',
+              : settings.pushplusConfigured ? 'PushPlus 已配置' : '尚未配置通知渠道',
             icon: <BellRing className="h-3.5 w-3.5" />,
             chart: (
               <OverviewSegments
                 segments={[
                   { label: '邮件', value: settings.emailConfigured ? 1 : 0 },
                   { label: '企微', value: settings.wechatConfigured ? 1 : 0 },
+                  { label: 'PushPlus', value: settings.pushplusConfigured ? 1 : 0 },
                 ]}
                 label="通知渠道配置状态"
               />
@@ -206,6 +209,17 @@ export default function SettingsPage() {
             wechatConfigured={settings.wechatConfigured}
             loading={settings.loading}
             onSave={() => { void settings.saveWechatConfig(); }}
+          />
+          <PushplusNotificationSection
+            open={settings.openSection === 'pushplus'}
+            onOpenChange={(open) => settings.setOpenSection(open ? 'pushplus' : null)}
+            config={settings.pushplusConfig}
+            setConfig={settings.setPushplusConfig}
+            configured={settings.pushplusConfigured}
+            loading={settings.savingPushplus}
+            testing={settings.testingPushplus}
+            onSave={() => { void settings.savePushplusConfig(); }}
+            onTest={() => { void settings.testPushplus(); }}
           />
           <DataBackupSection />
         </div>

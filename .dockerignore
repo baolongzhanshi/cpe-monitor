@@ -8,3 +8,6 @@ data
 .env.*.local
 *.md
 .cursor
+.env
+.env.*
+!.env.example

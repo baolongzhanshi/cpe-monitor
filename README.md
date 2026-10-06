@@ -10,8 +10,9 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 - 告警规则管理 - 支持流量、设备数量、信号强度等多种告警条件
 - 邮件通知 - SMTP 配置，支持多收件人
 - 企业微信通知 - Webhook 推送
+- PushPlus 推送 - 新收件短信同步推送到微信
 - 短信收件箱 - 读取 CPE 本地短信，展示未读状态和会话内容
-- 新短信同步 - 短信持久化到本地 SQLite，默认每 15 分钟独立同步一次；支持 1–1440 分钟自定义间隔和手动同步
+- 新短信同步 - 短信持久化到本地 SQLite，默认每 1 分钟独立同步一次；支持 1–1440 分钟自定义间隔和手动同步
 - 每日报告 - 自动生成流量日报，包含设备排名、网络质量评估
 - 网页化邮件模板 - React Email 响应式 HTML 邮件
 - 主题色定制 - 10 组预设色板 + 自定义 Hue 滑杆，全站品牌色即时切换
@@ -31,6 +32,47 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 - 邮件: nodemailer + React Email
 
 ## 快速开始
+
+### Windows 桌面安装包（普通用户推荐）
+
+发布页提供 `CPEye_*_x64-setup.exe`。普通用户只需要：
+
+1. 双击安装包，按向导完成安装；如果系统没有 WebView2，安装程序会自动下载安装。
+2. 启动 CPEye。首次启动页面会显示自动生成的管理员密码，复制保存后登录。
+3. 进入「系统设置 → CPE 连接」填写 CPE 地址、用户名和密码，再进入「系统设置 → PushPlus 推送」填写 Token 并发送测试消息。
+
+关闭窗口只会缩到系统托盘，后台短信同步会继续运行；在托盘菜单选择「退出并停止同步」才会结束服务。数据库和密钥保存在当前 Windows 用户的 AppData 目录，不写入安装目录。
+
+短信默认每 1 分钟轮询一次 CPE。PushPlus 的接口受理并不等同于微信端秒级到达，实际延迟还受 CPE 响应、网络和 PushPlus 队列影响。
+
+### 从源码构建 Windows 安装包
+
+推荐使用仓库内的 GitHub Actions `Windows 安装包` 工作流。它在 Windows 构建机上安装 Rust、下载与项目 Node ABI 匹配的 Node 运行时、构建 Next standalone 并产出 NSIS `.exe`。本机手工构建需要 Rust/Cargo、WebView2 开发环境和 `CPE_NODE_RUNTIME` 指向 Windows x64 的 `node.exe`，例如：
+
+```powershell
+npm ci
+$env:CPE_NODE_RUNTIME = 'C:\tools\node\node.exe'
+npm run build:desktop
+npm exec -- tauri build
+```
+
+### Windows / Docker 一键部署（开发与服务器）
+
+1. 安装并启动 [Docker Desktop](https://www.docker.com/products/docker-desktop/)。
+2. 在 CPE Monitor 项目目录打开 PowerShell，运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup.ps1
+```
+
+3. 按提示输入 CPE 管理地址、用户名和密码。脚本会生成随机管理后台密码与加密密钥，构建并启动容器；完成后访问 `http://localhost:3000`，首次登录密码会显示在终端。
+4. 登录后进入「系统设置 → PushPlus 推送」，填写 PushPlus Token，保存后发送测试消息。Token 在服务器端加密保存。
+
+脚本生成的密钥和设备凭据保存在项目目录的 `.env` 中，请妥善备份且不要提交到 Git。短信与设置数据保存在 Docker 持久化卷 `cpe-data` 中。更新代码后再次运行脚本即可重新构建；已有 `.env` 会被保留。
+
+PushPlus 的自定义消息正文通过其微信消息通道推送。PushPlus 短信通道只能发送固定提醒，不能携带 CPE 短信正文；`/send` 返回受理后仍由 PushPlus 异步投递，不保证秒级到达。新装默认每分钟轮询一次 CPE，实际延迟还受该轮询周期和 PushPlus 队列影响。首次同步只保存本地历史快照，不会批量推送旧短信。
+
+### 本地开发
 
 ### 1. 安装依赖
 
@@ -187,7 +229,7 @@ src/
 - `POST /api/dashboard/sms/sync` - 立即从 CPE 同步短信
 - `GET/POST /api/dashboard/sms/settings` - 查看或修改短信自动同步设置
 
-短信同步独立于流量监控任务，默认开启并每 15 分钟运行一次；设置页可调整为 1–1440 分钟的整数间隔或暂停。首次同步只建立本地快照，不会把历史短信批量推送出去；之后发现新的收件短信时，只有已启用且配置完整的邮箱或企业微信通知渠道会收到通知。
+短信同步独立于流量监控任务，默认开启并每 1 分钟运行一次；设置页可调整为 1–1440 分钟的整数间隔或暂停。首次同步只建立本地快照，不会把历史短信批量推送出去；之后发现新的收件短信时，只有已启用且配置完整的邮箱、企业微信或 PushPlus 通知渠道会收到通知。
 
 ### 报告
 - `GET /api/reports/daily` - 报告列表

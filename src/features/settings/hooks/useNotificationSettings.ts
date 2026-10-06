@@ -6,7 +6,9 @@ import type {
   EmailConfigForm,
   NotificationApiRow,
   PublicEmailApiConfig,
+  PublicPushplusApiConfig,
   PublicWechatApiConfig,
+  PushplusConfigForm,
   SettingsActionContext,
   WechatConfigForm,
 } from '../types';
@@ -18,11 +20,15 @@ const DEFAULT_EMAIL: EmailConfigForm = {
 export function useNotificationSettings(context: SettingsActionContext) {
   const [emailConfig, setEmailConfig] = useState<EmailConfigForm>(DEFAULT_EMAIL);
   const [wechatConfig, setWechatConfig] = useState<WechatConfigForm>({ webhookUrl: '' });
+  const [pushplusConfig, setPushplusConfig] = useState<PushplusConfigForm>({ token: '' });
   const [emailPasswordSet, setEmailPasswordSet] = useState(false);
   const [wechatWebhookSet, setWechatWebhookSet] = useState(false);
+  const [pushplusTokenSet, setPushplusTokenSet] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [savingEmail, setSavingEmail] = useState(false);
   const [savingWechat, setSavingWechat] = useState(false);
+  const [savingPushplus, setSavingPushplus] = useState(false);
+  const [testingPushplus, setTestingPushplus] = useState(false);
 
   const fetchConfigs = useCallback(async () => {
     try {
@@ -43,6 +49,9 @@ export function useNotificationSettings(context: SettingsActionContext) {
           const parsed = JSON.parse(row.config) as PublicWechatApiConfig;
           setWechatConfig({ webhookUrl: parsed.webhookUrl || '' });
           setWechatWebhookSet(Boolean(parsed.webhookConfigured));
+        } else if (row.type === 'pushplus') {
+          const parsed = JSON.parse(row.config) as PublicPushplusApiConfig;
+          setPushplusTokenSet(Boolean(parsed.tokenConfigured));
         }
       }
     } catch (error) {
@@ -93,8 +102,41 @@ export function useNotificationSettings(context: SettingsActionContext) {
     }
   }, [context, wechatConfig]);
 
+  const savePushplusConfig = useCallback(async () => {
+    setSavingPushplus(true);
+    try {
+      await apiFetch('/api/settings/notification', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'pushplus', config: pushplusConfig, enabled: true }),
+      }, '保存失败');
+      if (pushplusConfig.token.trim()) setPushplusTokenSet(true);
+      setPushplusConfig({ token: '' });
+      context.onMessage({ type: 'success', text: 'PushPlus 配置已保存' });
+      context.onSaved();
+    } catch (error) {
+      context.onMessage({ type: 'error', text: error instanceof Error ? error.message : '保存失败' });
+    } finally {
+      setSavingPushplus(false);
+    }
+  }, [context, pushplusConfig]);
+
+  const testPushplus = useCallback(async () => {
+    setTestingPushplus(true);
+    try {
+      const result = await apiFetch<{ success: boolean; message: string }>('/api/settings/notification/pushplus/test', {
+        method: 'POST',
+      }, 'PushPlus 测试失败');
+      context.onMessage({ type: result.success ? 'success' : 'error', text: result.message });
+    } catch (error) {
+      context.onMessage({ type: 'error', text: error instanceof Error ? error.message : 'PushPlus 测试失败' });
+    } finally {
+      setTestingPushplus(false);
+    }
+  }, [context]);
+
   const emailConfigured = Boolean(emailConfig.smtpHost && emailConfig.to);
   const wechatConfigured = wechatWebhookSet || Boolean(wechatConfig.webhookUrl);
+  const pushplusConfigured = pushplusTokenSet || Boolean(pushplusConfig.token);
   const recipientCount = useMemo(() => (
     emailConfig.to
       ? emailConfig.to.split(/[\n,;]+/).map((item) => item.trim()).filter(Boolean).length
@@ -103,7 +145,10 @@ export function useNotificationSettings(context: SettingsActionContext) {
 
   return {
     emailConfig, setEmailConfig, wechatConfig, setWechatConfig,
-    emailPasswordSet, wechatWebhookSet, emailConfigured, wechatConfigured, recipientCount,
-    initialLoading, savingEmail, savingWechat, saveEmailConfig, saveWechatConfig,
+    pushplusConfig, setPushplusConfig,
+    emailPasswordSet, wechatWebhookSet, pushplusTokenSet,
+    emailConfigured, wechatConfigured, pushplusConfigured, recipientCount,
+    initialLoading, savingEmail, savingWechat, savingPushplus, testingPushplus,
+    saveEmailConfig, saveWechatConfig, savePushplusConfig, testPushplus,
   };
 }

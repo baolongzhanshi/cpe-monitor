@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   notificationConfigNeedsMigration,
+  readNotificationConfigForDelivery,
+  toPublicNotificationConfig,
   prepareEmailConfigForStorage,
   prepareNotificationConfigForStorage,
   prepareWechatConfigForStorage,
@@ -80,4 +82,28 @@ test('wechat webhook is encrypted and never exposed publicly', () => {
   const publicConfig = toPublicWechatConfig(stored);
   assert.equal(publicConfig.webhookUrl, '');
   assert.equal(publicConfig.webhookConfigured, true);
+});
+
+test('pushplus token is encrypted at rest and redacted from public config', () => {
+  const stored = prepareNotificationConfigForStorage('pushplus', { token: 'pushplus-secret-token' });
+  const storedConfig = JSON.parse(stored) as { token: string };
+  assert.match(storedConfig.token, /^enc:v1\./);
+  assert.equal(storedConfig.token.includes('pushplus-secret-token'), false);
+
+  const delivered = readNotificationConfigForDelivery('pushplus', stored) as { token: string };
+  assert.equal(delivered.token, 'pushplus-secret-token');
+
+  const publicConfig = toPublicNotificationConfig('pushplus', stored) as {
+    token: string;
+    tokenConfigured: boolean;
+  };
+  assert.equal(publicConfig.token, '');
+  assert.equal(publicConfig.tokenConfigured, true);
+});
+
+test('blank PushPlus token preserves the previously stored token', () => {
+  const first = prepareNotificationConfigForStorage('pushplus', { token: 'original-pushplus-token' });
+  const updated = prepareNotificationConfigForStorage('pushplus', { token: '' }, first);
+  const delivered = readNotificationConfigForDelivery('pushplus', updated) as { token: string };
+  assert.equal(delivered.token, 'original-pushplus-token');
 });

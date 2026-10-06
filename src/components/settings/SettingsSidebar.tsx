@@ -9,6 +9,7 @@ import {
   MessageSquareText,
   Palette,
   RefreshCw,
+  Send,
   ScrollText,
   Wifi,
   Wrench,
@@ -99,6 +100,13 @@ export function SettingsSidebar({
             label="企业微信"
             detail="Webhook"
             onClick={() => onOpenSection('wechat')}
+          />
+          <SettingsNav
+            href="#pushplus"
+            icon={<Send className="h-3.5 w-3.5" />}
+            label="PushPlus 推送"
+            detail="短信同步"
+            onClick={() => onOpenSection('pushplus')}
           />
           <SettingsNav
             href="#data-backup"

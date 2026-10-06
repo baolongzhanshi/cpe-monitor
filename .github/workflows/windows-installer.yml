@@ -1,0 +1,40 @@
+name: Windows 安装包
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - shell: pwsh
+        run: |
+          $nodeZip = "$env:RUNNER_TEMP\node.zip"
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v24.14.0/node-v24.14.0-win-x64.zip" -OutFile $nodeZip
+          Expand-Archive $nodeZip "$env:RUNNER_TEMP\node"
+          "CPE_NODE_RUNTIME=$env:RUNNER_TEMP\node\node-v24.14.0-win-x64\node.exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - run: npm run build:desktop
+      - run: npx --yes @tauri-apps/cli@2 build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CPEye-Windows-installer
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

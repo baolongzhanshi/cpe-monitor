@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'framer-motion';
 import { Loader2, RadioTower, ShieldCheck } from 'lucide-react';
@@ -15,8 +15,18 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [firstRunPassword, setFirstRunPassword] = useState<string | null>(null);
   const router = useRouter();
   const reduce = useReducedMotion();
+
+  useEffect(() => {
+    fetch('/api/system/first-run-password', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((data: { available?: boolean; password?: string } | null) => {
+        if (data?.available && data.password) setFirstRunPassword(data.password);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +108,12 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-5">
+              {firstRunPassword ? (
+                <Callout tone="info" title="首次启动密码">
+                  已为你生成管理员密码：<code className="select-all break-all">{firstRunPassword}</code><br />
+                  请先复制保存，登录成功后此提示会自动隐藏。
+                </Callout>
+              ) : null}
               <motion.div
                 className="space-y-2"
                 animate={error && !reduce ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}

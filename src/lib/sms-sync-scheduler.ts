@@ -9,12 +9,14 @@ import { db, initializeDatabase } from './db';
 import { getOrCreateCpeClient } from './cpe-client';
 import { sendSmsNotification } from './notifiers/email';
 import { sendSmsWechat } from './notifiers/wechat';
+import { sendPushplusSms } from './notifiers/pushplus';
 import { getSettingsMap, readNotificationConfig, setSetting } from './settings-store';
 import { createIntervalScheduler, type SyncStatus } from './interval-scheduler';
+import { hasStoredSmsChanged, type ExistingSmsRecord } from './sms-sync-utils';
 
 export const SMS_SYNC_MIN_INTERVAL = 1;
 export const SMS_SYNC_MAX_INTERVAL = 1440;
-export const SMS_SYNC_DEFAULT_INTERVAL = 15;
+export const SMS_SYNC_DEFAULT_INTERVAL = 1;
 
 export type SmsSyncStatus = SyncStatus;
 
@@ -74,6 +76,7 @@ async function performSmsSync(): Promise<SmsSyncResult> {
   const firstSync = settings.sms_initial_sync_completed !== 'true' && existingCount === 0;
   const emailConfig = readNotificationConfig('email');
   const wechatConfig = readNotificationConfig('wechat');
+  const pushplusConfig = readNotificationConfig('pushplus');
   let inserted = 0;
   let updated = 0;
   let notificationsSent = 0;
@@ -82,11 +85,29 @@ async function performSmsSync(): Promise<SmsSyncResult> {
     const fingerprint = crypto.createHash('sha256')
       .update(`${sms.id}|${sms.phone}|${sms.date}|${sms.content}`)
       .digest('hex');
-    const existing = db.prepare('SELECT fingerprint FROM sms_messages WHERE fingerprint = ?').get(fingerprint);
+    const rawJson = JSON.stringify(sms);
+    const existing = db.prepare(`
+      SELECT phone, content, received_at, unread, direction, raw_json
+      FROM sms_messages
+      WHERE fingerprint = ?
+    `).get(fingerprint) as ExistingSmsRecord | undefined;
     if (existing) {
-      db.prepare('UPDATE sms_messages SET unread = ?, raw_json = ? WHERE fingerprint = ?')
-        .run(sms.unread ? 1 : 0, JSON.stringify(sms), fingerprint);
-      updated += 1;
+      if (hasStoredSmsChanged(existing, sms, rawJson)) {
+        db.prepare(`
+          UPDATE sms_messages
+          SET phone = ?, content = ?, received_at = ?, unread = ?, direction = ?, raw_json = ?
+          WHERE fingerprint = ?
+        `).run(
+          sms.phone,
+          sms.content,
+          sms.date,
+          sms.unread ? 1 : 0,
+          sms.direction,
+          rawJson,
+          fingerprint,
+        );
+        updated += 1;
+      }
       continue;
     }
 
@@ -98,6 +119,9 @@ async function performSmsSync(): Promise<SmsSyncResult> {
       }
       if (wechatConfig?.webhookUrl) {
         sent = await sendSmsWechat(wechatConfig, sms) || sent;
+      }
+      if (pushplusConfig?.token) {
+        sent = await sendPushplusSms(pushplusConfig, sms) || sent;
       }
       notified = sent ? 1 : 0;
       if (sent) notificationsSent += 1;
@@ -116,7 +140,7 @@ async function performSmsSync(): Promise<SmsSyncResult> {
       sms.unread ? 1 : 0,
       sms.direction,
       notified,
-      JSON.stringify(sms),
+      rawJson,
     );
     inserted += 1;
   }

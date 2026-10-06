@@ -19,6 +19,11 @@
 
 # production
 /build
+/src-tauri/resources/
+/src-tauri/binaries/
+/src-tauri/target/
+/backups/
+/tools/
 
 # misc
 .DS_Store
@@ -57,3 +62,7 @@ next-env.d.ts
 
 # Docker deploy skill (contains server credentials)
 .cursor/skills/docker-deploy/
+# 本地部署密钥与容器数据
+.env
+.env.local
+data/

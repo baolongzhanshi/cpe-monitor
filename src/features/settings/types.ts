@@ -5,7 +5,8 @@ export type SettingsSectionId =
   | 'retention'
   | 'quota'
   | 'email'
-  | 'wechat';
+  | 'wechat'
+  | 'pushplus';
 
 export interface CpeConfigForm {
   cpeUrl: string;
@@ -24,6 +25,10 @@ export interface EmailConfigForm {
 
 export interface WechatConfigForm {
   webhookUrl: string;
+}
+
+export interface PushplusConfigForm {
+  token: string;
 }
 
 export interface SyncConfigForm {
@@ -86,6 +91,10 @@ export interface PublicEmailApiConfig {
 export interface PublicWechatApiConfig {
   webhookUrl?: string;
   webhookConfigured?: boolean;
+}
+
+export interface PublicPushplusApiConfig {
+  tokenConfigured?: boolean;
 }
 
 export interface DataQuotaForm {

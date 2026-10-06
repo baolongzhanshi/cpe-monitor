@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { verifyAdminPassword, createToken } from '@/lib/auth';
 import { ApiError, jsonOk, parseJsonBody, withApiHandler } from '@/lib/api-route';
+import fs from 'node:fs';
 
 export const POST = withApiHandler(async (request) => {
   const body = await parseJsonBody<{ password?: string }>(request);
@@ -20,5 +21,9 @@ export const POST = withApiHandler(async (request) => {
     maxAge: 60 * 60 * 24,
     path: '/',
   });
+  const firstRunPath = process.env.CPE_FIRST_RUN_PASSWORD_FILE?.trim();
+  if (firstRunPath) {
+    try { fs.rmSync(firstRunPath, { force: true }); } catch { /* 密码提示文件清理失败不影响登录 */ }
+  }
   return jsonOk({ success: true, username: 'admin' });
 }, '登录失败');

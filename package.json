@@ -9,7 +9,8 @@
     "lint": "node node_modules/eslint/bin/eslint.js src",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "test": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "build:desktop": "next build --webpack && node scripts/build-desktop.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

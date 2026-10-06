@@ -1,0 +1,18 @@
+services:
+  cpe-monitor:
+    build:
+      context: .
+      args:
+        JWT_SECRET: ${JWT_SECRET:?请先运行 scripts/setup.ps1}
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - cpe-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  cpe-data:

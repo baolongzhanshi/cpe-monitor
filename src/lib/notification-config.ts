@@ -2,13 +2,14 @@ import type { EmailConfig, WechatConfig } from '../types/index.ts';
 import type { TelegramConfig } from './notifiers/telegram.ts';
 import type { DingtalkConfig } from './notifiers/dingtalk.ts';
 import type { BarkConfig } from './notifiers/bark.ts';
+import type { PushplusConfig } from './notifiers/pushplus.ts';
 import {
   decryptSecureValue,
   encryptSecureValue,
   isEncryptedSecureValue,
 } from './secure-value.ts';
 
-export type NotificationType = 'email' | 'wechat' | 'telegram' | 'dingtalk' | 'bark';
+export type NotificationType = 'email' | 'wechat' | 'telegram' | 'dingtalk' | 'bark' | 'pushplus';
 
 const EMAIL_PASSWORD_PURPOSE = 'notification-email-smtp-password';
 const WECHAT_WEBHOOK_PURPOSE = 'notification-wechat-webhook';
@@ -16,6 +17,7 @@ const TELEGRAM_TOKEN_PURPOSE = 'notification-telegram-bot-token';
 const DINGTALK_WEBHOOK_PURPOSE = 'notification-dingtalk-webhook';
 const DINGTALK_SECRET_PURPOSE = 'notification-dingtalk-secret';
 const BARK_KEY_PURPOSE = 'notification-bark-device-key';
+const PUSHPLUS_TOKEN_PURPOSE = 'notification-pushplus-token';
 
 interface StoredEmailConfig extends Omit<EmailConfig, 'smtpPass'> {
   smtpPass: string;
@@ -38,6 +40,10 @@ interface StoredDingtalkConfig {
 interface StoredBarkConfig {
   serverUrl: string;
   deviceKey: string;
+}
+
+interface StoredPushplusConfig {
+  token: string;
 }
 
 export interface PublicEmailConfig extends Omit<EmailConfig, 'smtpPass'> {
@@ -66,6 +72,11 @@ export interface PublicBarkConfig {
   serverUrl: string;
   deviceKey: '';
   deviceKeySet: boolean;
+}
+
+export interface PublicPushplusConfig {
+  token: '';
+  tokenConfigured: boolean;
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -161,6 +172,11 @@ export function readBarkConfig(raw: unknown): BarkConfig {
   };
 }
 
+export function readPushplusConfig(raw: unknown): PushplusConfig {
+  const config = asObject(raw);
+  return { token: readSecret(config.token, PUSHPLUS_TOKEN_PURPOSE) };
+}
+
 export function prepareEmailConfigForStorage(
   input: unknown,
   existingRaw?: unknown,
@@ -237,6 +253,16 @@ export function prepareBarkConfigForStorage(
   };
 }
 
+export function preparePushplusConfigForStorage(
+  input: unknown,
+  existingRaw?: unknown,
+): StoredPushplusConfig {
+  const next = asObject(input);
+  const existing = existingRaw === undefined ? null : readPushplusConfig(existingRaw);
+  const token = stringValue(next.token) || existing?.token || '';
+  return { token: storeSecret(token, PUSHPLUS_TOKEN_PURPOSE) };
+}
+
 export function prepareNotificationConfigForStorage(
   type: NotificationType,
   input: unknown,
@@ -258,6 +284,9 @@ export function prepareNotificationConfigForStorage(
       break;
     case 'bark':
       stored = prepareBarkConfigForStorage(input, existingRaw);
+      break;
+    case 'pushplus':
+      stored = preparePushplusConfigForStorage(input, existingRaw);
       break;
     default:
       stored = {};
@@ -287,6 +316,9 @@ export function notificationConfigNeedsMigration(
     case 'bark':
       secret = stringValue(config.deviceKey);
       break;
+    case 'pushplus':
+      secret = stringValue(config.token);
+      break;
   }
   return Boolean(secret) && !isEncryptedSecureValue(secret);
 }
@@ -312,19 +344,24 @@ export function readNotificationConfigForDelivery(
   raw: unknown,
 ): BarkConfig;
 export function readNotificationConfigForDelivery(
-  type: NotificationType,
+  type: 'pushplus',
   raw: unknown,
-): EmailConfig | WechatConfig | TelegramConfig | DingtalkConfig | BarkConfig;
+): PushplusConfig;
 export function readNotificationConfigForDelivery(
   type: NotificationType,
   raw: unknown,
-): EmailConfig | WechatConfig | TelegramConfig | DingtalkConfig | BarkConfig {
+): EmailConfig | WechatConfig | TelegramConfig | DingtalkConfig | BarkConfig | PushplusConfig;
+export function readNotificationConfigForDelivery(
+  type: NotificationType,
+  raw: unknown,
+): EmailConfig | WechatConfig | TelegramConfig | DingtalkConfig | BarkConfig | PushplusConfig {
   switch (type) {
     case 'email': return readEmailConfig(raw);
     case 'wechat': return readWechatConfig(raw);
     case 'telegram': return readTelegramConfig(raw);
     case 'dingtalk': return readDingtalkConfig(raw);
     case 'bark': return readBarkConfig(raw);
+    case 'pushplus': return readPushplusConfig(raw);
     default: return readEmailConfig(raw);
   }
 }
@@ -373,16 +410,24 @@ export function toPublicBarkConfig(raw: unknown): PublicBarkConfig {
   };
 }
 
+export function toPublicPushplusConfig(raw: unknown): PublicPushplusConfig {
+  return {
+    token: '',
+    tokenConfigured: Boolean(readPushplusConfig(raw).token),
+  };
+}
+
 export function toPublicNotificationConfig(
   type: NotificationType,
   raw: unknown,
-): PublicEmailConfig | PublicWechatConfig | PublicTelegramConfig | PublicDingtalkConfig | PublicBarkConfig {
+): PublicEmailConfig | PublicWechatConfig | PublicTelegramConfig | PublicDingtalkConfig | PublicBarkConfig | PublicPushplusConfig {
   switch (type) {
     case 'email': return toPublicEmailConfig(raw);
     case 'wechat': return toPublicWechatConfig(raw);
     case 'telegram': return toPublicTelegramConfig(raw);
     case 'dingtalk': return toPublicDingtalkConfig(raw);
     case 'bark': return toPublicBarkConfig(raw);
+    case 'pushplus': return toPublicPushplusConfig(raw);
     default: return toPublicEmailConfig(raw);
   }
 }

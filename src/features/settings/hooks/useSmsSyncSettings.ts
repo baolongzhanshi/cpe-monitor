@@ -6,7 +6,7 @@ import type { SettingsActionContext, SmsSyncConfigForm } from '../types';
 export function useSmsSyncSettings(context: SettingsActionContext) {
   const { config, setConfig, initialLoading, saving, stateLabel, save } = useSyncSettings({
     endpoint: '/api/dashboard/sms/settings',
-    defaultInterval: 15,
+    defaultInterval: 1,
     min: 1,
     max: 1440,
     label: '短信自动同步',

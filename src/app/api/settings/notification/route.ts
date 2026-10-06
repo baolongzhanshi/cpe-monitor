@@ -21,12 +21,12 @@ export const POST = withApiHandler(async (request) => {
   await requireSession();
   ensureDatabase();
   const body = await parseJsonBody<{
-    type?: 'email' | 'wechat';
+    type?: 'email' | 'wechat' | 'pushplus';
     config?: unknown;
     enabled?: boolean;
   }>(request);
 
-  if (!body.type || !body.config || !['email', 'wechat'].includes(body.type)) {
+  if (!body.type || !body.config || !['email', 'wechat', 'pushplus'].includes(body.type)) {
     throw new ApiError('通知配置格式不正确', 400);
   }
 

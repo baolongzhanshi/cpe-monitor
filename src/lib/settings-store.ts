@@ -2,6 +2,7 @@ import type { EmailConfig, WechatConfig } from '@/types';
 import type { TelegramConfig } from '@/lib/notifiers/telegram';
 import type { DingtalkConfig } from '@/lib/notifiers/dingtalk';
 import type { BarkConfig } from '@/lib/notifiers/bark';
+import type { PushplusConfig } from '@/lib/notifiers/pushplus';
 import {
   decryptSecureValue,
   encryptSecureValue,
@@ -198,7 +199,7 @@ export function upsertCpeConfig(input: {
 /** Returns notification rows with all secrets removed from their public JSON. */
 export function listNotificationConfigRows(): PublicNotificationConfigRow[] {
   return listNotificationConfigs().map((row) => {
-    if (row.type !== 'email' && row.type !== 'wechat') {
+    if (row.type !== 'email' && row.type !== 'wechat' && row.type !== 'pushplus') {
       return { ...row, config: '{}' };
     }
     return {
@@ -217,7 +218,8 @@ export function readNotificationConfig(type: 'wechat'): WechatConfig | null;
 export function readNotificationConfig(type: 'telegram'): TelegramConfig | null;
 export function readNotificationConfig(type: 'dingtalk'): DingtalkConfig | null;
 export function readNotificationConfig(type: 'bark'): BarkConfig | null;
-export function readNotificationConfig(type: NotificationType): EmailConfig | WechatConfig | TelegramConfig | DingtalkConfig | BarkConfig | null {
+export function readNotificationConfig(type: 'pushplus'): PushplusConfig | null;
+export function readNotificationConfig(type: NotificationType): EmailConfig | WechatConfig | TelegramConfig | DingtalkConfig | BarkConfig | PushplusConfig | null {
   const row = getNotificationConfigRow(type);
   if (!row || !row.enabled) return null;
 
