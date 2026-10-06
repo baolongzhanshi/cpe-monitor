@@ -9,7 +9,7 @@ use std::{
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager, WebviewWindowBuilder, WindowEvent,
+    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -125,6 +125,55 @@ fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path)
     Ok(child)
 }
 
+
+fn record_desktop_event(app: &AppHandle, message: &str) {
+    use std::io::Write;
+    if let Ok(directory) = app.path().app_data_dir() {
+        let path = directory.join("desktop-events.log");
+        if fs::metadata(&path).map(|meta| meta.len() >= 65536).unwrap_or(false) { return; }
+        if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(file, "{message}");
+        }
+    }
+}
+
+fn local_server_ready() -> bool {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+    let address = SocketAddr::from(([127, 0, 0, 1], SERVER_PORT));
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(500)) else { return false; };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+    if stream.write_all(b"GET /api/system/health HTTP/1.1\r\nHost: 127.0.0.1:3210\r\nConnection: close\r\n\r\n").is_err() { return false; }
+    let mut status = String::new();
+    BufReader::new(stream).read_line(&mut status).is_ok() && status.starts_with("HTTP/1.1 200 ")
+}
+
+fn navigate_when_ready(app: AppHandle) {
+    std::thread::spawn(move || {
+        for _ in 0..60 {
+            if app.state::<AppState>().exiting.load(Ordering::SeqCst) { return; }
+            if local_server_ready() {
+                if let Some(window) = app.get_webview_window("main") {
+                    match "http://127.0.0.1:3210/login".parse() {
+                        Ok(url) => {
+                            if let Err(error) = window.navigate(url) { record_desktop_event(&app, &format!("打开登录页失败: {error}")); }
+                        }
+                        Err(error) => record_desktop_event(&app, &format!("登录页地址无效: {error}")),
+                    }
+                }
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        record_desktop_event(&app, "内置服务未就绪");
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval("document.getElementById('status').textContent = '本地服务启动失败，请从托盘退出后重新打开。';");
+        }
+    });
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -140,14 +189,16 @@ fn show_main_window(app: &AppHandle) {
     std::thread::spawn(move || {
         let result = handle.config().app.windows.iter()
             .find(|config| config.label == "main")
+            .cloned()
             .ok_or_else(|| boxed_error("缺少主窗口配置"))
-            .and_then(|config| {
-                WebviewWindowBuilder::from_config(&handle, config)
+            .and_then(|mut config| {
+                config.url = WebviewUrl::External("http://127.0.0.1:3210/login".parse().map_err(boxed_error)?);
+                WebviewWindowBuilder::from_config(&handle, &config)
                     .map_err(boxed_error)?.build().map_err(boxed_error)
             });
         match result {
             Ok(window) => { let _ = window.set_focus(); }
-            Err(error) => eprintln!("重新打开主窗口失败: {error}"),
+            Err(error) => record_desktop_event(&handle, &format!("重新打开主窗口失败: {error}")),
         }
         handle.state::<AppState>().opening_window.store(false, Ordering::SeqCst);
     });
@@ -155,6 +206,11 @@ fn show_main_window(app: &AppHandle) {
 
 pub fn run() {
     tauri::Builder::default()
+        .on_page_load(|webview, payload| {
+            if payload.url().host_str() == Some("127.0.0.1") {
+                record_desktop_event(webview.app_handle(), &format!("本地页面 {:?}: {}", payload.event(), payload.url().path()));
+            }
+        })
         // 重复打开应用只恢复窗口，避免额外 Node 进程和端口争用。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main_window(app);
@@ -167,6 +223,7 @@ pub fn run() {
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().map_err(boxed_error)?;
             let (secrets, first_run) = load_or_create_secrets(&app_data_dir)?;
+            fs::write(app_data_dir.join("desktop-events.log"), b"").map_err(boxed_error)?;
             if first_run {
                 let first_run_path = app_data_dir.join("first-run-password.txt");
                 fs::write(first_run_path, &secrets.admin_password).map_err(boxed_error)?;
@@ -174,6 +231,9 @@ pub fn run() {
 
             let child = spawn_server(app, &secrets, &app_data_dir)?;
             app.state::<AppState>().sidecar.lock().map_err(|_| boxed_error("sidecar 状态锁定失败"))?.replace(child);
+
+            // 由原生宿主检测服务就绪并导航，避免启动页跨域请求受到 WebView 策略限制。
+            navigate_when_ready(app.handle().clone());
 
             let show = MenuItem::with_id(app, "show", "打开 CPEye", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出并停止同步", true, None::<&str>)?;

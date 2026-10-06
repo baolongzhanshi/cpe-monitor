@@ -12,7 +12,7 @@
       h1 { margin: 0 0 10px; font-size: 22px; }
       p { margin: 0; color: #9eabb7; font-size: 14px; }
       .bar { height: 4px; margin: 26px auto 0; overflow: hidden; border-radius: 99px; background: #27323b; }
-      .bar::after { content: ""; display: block; width: 42%; height: 100%; border-radius: inherit; background: #28b6c7; animation: load 1.4s ease-in-out infinite; }
+      .bar::after { content: ""; display: block; width: 42%; height: 100%; border-radius: inherit; background: #28b6c7; animation: load 1.4s ease-in-out 6; }
       @keyframes load { 0% { transform: translateX(-110%); } 50%, 100% { transform: translateX(250%); } }
     </style>
   </head>
@@ -23,28 +23,5 @@
       <p id="status">正在准备本地监控服务…</p>
       <div class="bar" aria-hidden="true"></div>
     </main>
-    <script>
-      const status = document.getElementById('status');
-      const healthUrl = 'http://127.0.0.1:3210/api/system/health';
-      let attempts = 0;
-      async function waitForServer() {
-        attempts += 1;
-        try {
-          // 启动页与本地服务不同源，只检查服务能否接受连接。
-          await fetch(healthUrl, { cache: 'no-store', mode: 'no-cors', signal: AbortSignal.timeout(2000) });
-          window.location.replace('http://127.0.0.1:3210/login');
-          return;
-        } catch (_) {
-          // 本地服务启动期间连接失败是正常状态。
-        }
-        if (attempts > 120) {
-          status.textContent = '本地服务启动失败，请从托盘退出 CPEye 后重新打开。';
-          return;
-        }
-        if (attempts > 30) status.textContent = '服务启动时间较长，请稍候…';
-        window.setTimeout(waitForServer, attempts > 30 ? 1000 : 500);
-      }
-      waitForServer();
-    </script>
   </body>
 </html>

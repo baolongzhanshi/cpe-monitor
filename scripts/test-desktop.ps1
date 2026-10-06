@@ -3,6 +3,25 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class CpeSmokeWindows {
+    private delegate bool EnumWindowsCallback(IntPtr window, IntPtr argument);
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsCallback callback, IntPtr argument);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int limit);
+    public static IntPtr FindOwnedWindow(uint owner, string title) {
+        IntPtr result = IntPtr.Zero;
+        EnumWindows((window, argument) => {
+            uint processId;
+            GetWindowThreadProcessId(window, out processId);
+            if (processId != owner) return true;
+            var text = new System.Text.StringBuilder(512);
+            GetWindowText(window, text, text.Capacity);
+            if (text.ToString() != title) return true;
+            result = window;
+            return false;
+        }, IntPtr.Zero);
+        return result;
+    }
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindow(string className, string windowName);
     [DllImport("user32.dll")]
@@ -12,7 +31,7 @@ public static class CpeSmokeWindows {
 }
 '@
 function Get-CpeMainWindow([int]$appProcessId) {
-    $handle = [CpeSmokeWindows]::FindWindow($null, $script:cpeWindowTitle)
+    $handle = [CpeSmokeWindows]::FindOwnedWindow([uint32]$appProcessId, $script:cpeWindowTitle)
     if ($handle -eq [IntPtr]::Zero) { return [IntPtr]::Zero }
     [uint32]$ownerId = 0
     [void][CpeSmokeWindows]::GetWindowThreadProcessId($handle, [ref]$ownerId)
@@ -45,6 +64,20 @@ try {
     $login = Invoke-WebRequest 'http://127.0.0.1:3210/login' -TimeoutSec 10
     $firstRun = Invoke-RestMethod 'http://127.0.0.1:3210/api/system/first-run-password' -TimeoutSec 5
     if ($login.StatusCode -ne 200 -or -not $firstRun.available) { throw '首次登录流程验收失败' }
+    $desktopLog = Join-Path $env:APPDATA 'com.cpeye.monitor/desktop-events.log'
+    function Get-LoginPageLoadCount {
+        if (-not (Test-Path $desktopLog)) { return 0 }
+        return [regex]::Matches([IO.File]::ReadAllText($desktopLog), '本地页面 Finished: /login').Count
+    }
+    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+        if ((Get-LoginPageLoadCount) -gt 0) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    $initialPageLoads = Get-LoginPageLoadCount
+    if ($initialPageLoads -eq 0) {
+        if (Test-Path $desktopLog) { Get-Content $desktopLog }
+        throw '桌面窗口没有真正进入登录页'
+    }
     # 关闭页面后释放 WebView，后台服务保持原进程；再次运行只恢复窗口。
     $script:cpeWindowTitle = $null
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
@@ -69,10 +102,13 @@ try {
     try {
         for ($attempt = 0; $attempt -lt 40; $attempt++) {
             $appProcess.Refresh()
-            if ((Get-CpeMainWindow $appProcess.Id) -ne [IntPtr]::Zero) { break }
+            if ((Get-CpeMainWindow $appProcess.Id) -ne [IntPtr]::Zero -and (Get-LoginPageLoadCount) -gt $initialPageLoads) { break }
             Start-Sleep -Milliseconds 500
         }
-        if ((Get-CpeMainWindow $appProcess.Id) -eq [IntPtr]::Zero) { throw '未能重新打开窗口' }
+        if ((Get-CpeMainWindow $appProcess.Id) -eq [IntPtr]::Zero -or (Get-LoginPageLoadCount) -le $initialPageLoads) {
+            if (Test-Path $desktopLog) { Get-Content $desktopLog }
+            throw '未能重新打开登录窗口'
+        }
         if ((Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess -ne $serverPid) { throw '重新打开窗口重启了后台服务' }
         if (-not $secondLaunch.WaitForExit(5000)) { throw '单实例检查失败' }
     } finally {
