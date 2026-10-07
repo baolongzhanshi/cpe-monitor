@@ -15,6 +15,8 @@ use tauri::{
 use std::os::windows::process::CommandExt;
 
 const SERVER_PORT: u16 = 3210;
+// 启动地址随安装版本变化，避免升级首次导航仍命中旧页面的离线缓存。
+const MAIN_URL: &str = concat!("http://127.0.0.1:3210/dashboard?desktopVersion=", env!("CARGO_PKG_VERSION"));
 type AppResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn boxed_error(error: impl std::fmt::Display) -> Box<dyn std::error::Error> {
@@ -83,7 +85,6 @@ fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path)
     }
 
     let database_path = app_data_dir.join("data").join("cpe-monitor.db");
-    let first_run_path = app_data_dir.join("first-run-password.txt");
     let node_path = resource_dir.join(if cfg!(windows) { "node.exe" } else { "node" });
     let mut command = Command::new(node_path);
     command
@@ -92,9 +93,8 @@ fn spawn_server(app: &tauri::App, secrets: &RuntimeSecrets, app_data_dir: &Path)
         .env("NODE_ENV", "production")
         .env("HOSTNAME", "127.0.0.1")
         .env("PORT", SERVER_PORT.to_string())
+        .env("CPE_DESKTOP_MODE", "true")
         .env("CPE_DATABASE_PATH", database_path.to_string_lossy().to_string())
-        .env("CPE_FIRST_RUN_PASSWORD_FILE", first_run_path.to_string_lossy().to_string())
-        .env("ADMIN_PASSWORD", &secrets.admin_password)
         .env("JWT_SECRET", &secrets.jwt_secret)
         .env("CPE_CONFIG_SECRET", &secrets.cpe_config_secret)
         .env("CPE_SESSION_SECRET", &secrets.cpe_session_secret)
@@ -156,11 +156,11 @@ fn navigate_when_ready(app: AppHandle) {
             if app.state::<AppState>().exiting.load(Ordering::SeqCst) { return; }
             if local_server_ready() {
                 if let Some(window) = app.get_webview_window("main") {
-                    match "http://127.0.0.1:3210/login".parse() {
+                    match MAIN_URL.parse() {
                         Ok(url) => {
-                            if let Err(error) = window.navigate(url) { record_desktop_event(&app, &format!("打开登录页失败: {error}")); }
+                            if let Err(error) = window.navigate(url) { record_desktop_event(&app, &format!("打开控制台失败: {error}")); }
                         }
-                        Err(error) => record_desktop_event(&app, &format!("登录页地址无效: {error}")),
+                        Err(error) => record_desktop_event(&app, &format!("控制台地址无效: {error}")),
                     }
                 }
                 return;
@@ -192,7 +192,7 @@ fn show_main_window(app: &AppHandle) {
             .cloned()
             .ok_or_else(|| boxed_error("缺少主窗口配置"))
             .and_then(|mut config| {
-                config.url = WebviewUrl::External("http://127.0.0.1:3210/login".parse().map_err(boxed_error)?);
+                config.url = WebviewUrl::External(MAIN_URL.parse().map_err(boxed_error)?);
                 WebviewWindowBuilder::from_config(&handle, &config)
                     .map_err(boxed_error)?.build().map_err(boxed_error)
             });
@@ -222,12 +222,10 @@ pub fn run() {
         })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().map_err(boxed_error)?;
-            let (secrets, first_run) = load_or_create_secrets(&app_data_dir)?;
+            let (secrets, _) = load_or_create_secrets(&app_data_dir)?;
             fs::write(app_data_dir.join("desktop-events.log"), b"").map_err(boxed_error)?;
-            if first_run {
-                let first_run_path = app_data_dir.join("first-run-password.txt");
-                fs::write(first_run_path, &secrets.admin_password).map_err(boxed_error)?;
-            }
+            // 升级后清理旧的密码提示文件，数据库和设备密钥继续使用原配置。
+            let _ = fs::remove_file(app_data_dir.join("first-run-password.txt"));
 
             let child = spawn_server(app, &secrets, &app_data_dir)?;
             app.state::<AppState>().sidecar.lock().map_err(|_| boxed_error("sidecar 状态锁定失败"))?.replace(child);

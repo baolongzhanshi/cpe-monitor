@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
-import { Check, ChevronLeft, ChevronRight, Rocket, Wifi, BellRing, Timer, PartyPopper } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { Check, ChevronLeft, ChevronRight, Rocket, Wifi, BellRing, Timer, PartyPopper, LoaderCircle } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -10,6 +10,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiFetch } from '@/lib/client-api';
 import { cn } from '@/lib/utils';
+import { normalizeCpeUrl } from '@/lib/cpe-url';
+
+async function saveSetupStep(url: string, body: unknown, fallbackError: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    await apiFetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    }, fallbackError);
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('保存超时，请重试。');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 const STEPS = [
   { id: 'welcome', label: '欢迎', icon: Rocket },
@@ -27,62 +48,60 @@ interface SetupWizardProps {
 export function SetupWizard({ open, onComplete }: SetupWizardProps) {
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const savingRef = useRef(false);
 
-  // CPE connection form
+  // CPE 连接信息
   const [cpeUrl, setCpeUrl] = useState('');
   const [cpeUsername, setCpeUsername] = useState('admin');
   const [cpePassword, setCpePassword] = useState('');
 
-  // Scheduler form
+  // 定时采集设置
   const [schedulerEnabled, setSchedulerEnabled] = useState(true);
   const [schedulerInterval, setSchedulerInterval] = useState('60');
 
   const finishSetup = useCallback(async () => {
-    setSaving(true);
-    try {
-      await apiFetch('/api/system/setup-status', {
-        method: 'POST',
-        body: JSON.stringify({ completed: true }),
-      }, '保存设置失败');
-      onComplete();
-    } finally {
-      setSaving(false);
-    }
+    await saveSetupStep('/api/system/setup-status', { completed: true }, '保存设置失败');
+    onComplete();
   }, [onComplete]);
 
   const saveCpeConfig = useCallback(async () => {
-    if (!cpeUrl.trim()) return;
-    setSaving(true);
-    try {
-      await apiFetch('/api/settings/cpe', {
-        method: 'POST',
-        body: JSON.stringify({
-          cpeUrl: cpeUrl.trim(),
-          cpeUsername: cpeUsername.trim() || 'admin',
-          cpePassword: cpePassword || undefined,
-        }),
-      }, '保存 CPE 配置失败');
-    } finally {
-      setSaving(false);
-    }
+    const normalizedUrl = normalizeCpeUrl(cpeUrl);
+    await saveSetupStep('/api/settings/cpe', {
+      cpeUrl: normalizedUrl,
+      cpeUsername: cpeUsername.trim() || 'admin',
+      cpePassword: cpePassword || undefined,
+    }, '保存 CPE 配置失败');
+    setCpeUrl(normalizedUrl);
   }, [cpeUrl, cpeUsername, cpePassword]);
 
   const saveScheduler = useCallback(async () => {
-    setSaving(true);
-    try {
-      await apiFetch('/api/dashboard/scheduler', {
-        method: 'POST',
-        body: JSON.stringify({
-          enabled: schedulerEnabled,
-          interval: Number(schedulerInterval) || 60,
-        }),
-      }, '保存调度器配置失败');
-    } finally {
-      setSaving(false);
+    const interval = Number(schedulerInterval);
+    if (schedulerEnabled && (!Number.isInteger(interval) || interval < 5 || interval > 1440)) {
+      throw new Error('采集间隔应为 5～1440 分钟的整数');
     }
+    await saveSetupStep('/api/dashboard/scheduler', {
+      enabled: schedulerEnabled,
+      interval: schedulerEnabled ? interval : 60,
+    }, '保存调度器配置失败');
   }, [schedulerEnabled, schedulerInterval]);
 
-  const handleNext = async () => {
+  const runAction = useCallback(async (action: () => Promise<void>) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError(null);
+    try {
+      await action();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '保存设置失败，请重试。');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }, []);
+
+  const handleNext = () => runAction(async () => {
     if (step === 1) await saveCpeConfig();
     if (step === 3) await saveScheduler();
     if (step === STEPS.length - 1) {
@@ -90,19 +109,20 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
       return;
     }
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  });
+
+  const handleBack = () => {
+    setError(null);
+    setStep((s) => Math.max(s - 1, 0));
   };
 
-  const handleBack = () => setStep((s) => Math.max(s - 1, 0));
-
-  const handleSkip = async () => {
-    await finishSetup();
-  };
+  const handleSkip = () => runAction(finishSetup);
 
   const currentStep = STEPS[step];
 
   return (
     <Dialog open={open}>
-      <DialogContent showCloseButton={false} className="sm:max-w-md">
+      <DialogContent showCloseButton={false} className="sm:max-w-md" aria-busy={saving}>
         <DialogHeader>
           <div className="mb-2 flex items-center gap-1.5">
             {STEPS.map((s, i) => (
@@ -128,7 +148,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
           </DialogDescription>
         </DialogHeader>
 
-        {/* Step content */}
+        {/* 当前步骤 */}
         <div className="min-h-[140px] space-y-4">
           {step === 0 && (
             <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
@@ -150,6 +170,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                   id="cpe-url"
                   placeholder="http://192.168.1.1"
                   value={cpeUrl}
+                  disabled={saving}
                   onChange={(e) => setCpeUrl(e.target.value)}
                 />
               </div>
@@ -159,6 +180,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                   id="cpe-user"
                   placeholder="admin"
                   value={cpeUsername}
+                  disabled={saving}
                   onChange={(e) => setCpeUsername(e.target.value)}
                 />
               </div>
@@ -169,6 +191,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                   type="password"
                   placeholder="CPE 管理密码"
                   value={cpePassword}
+                  disabled={saving}
                   onChange={(e) => setCpePassword(e.target.value)}
                 />
               </div>
@@ -193,6 +216,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                 <input
                   type="checkbox"
                   checked={schedulerEnabled}
+                  disabled={saving}
                   onChange={(e) => setSchedulerEnabled(e.target.checked)}
                   className="h-4 w-4 rounded border-input accent-brand"
                 />
@@ -207,6 +231,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                     min={5}
                     max={1440}
                     value={schedulerInterval}
+                    disabled={saving}
                     onChange={(e) => setSchedulerInterval(e.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">推荐 30~60 分钟，过短可能增加 CPE 负担。</p>
@@ -221,11 +246,17 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                 <Check className="h-8 w-8 text-success" />
               </div>
               <p className="text-sm text-muted-foreground">
-                一切就绪！点击"开始使用"进入仪表盘。
+                一切就绪！点击「开始使用」进入仪表盘。
               </p>
             </div>
           )}
         </div>
+
+        {error && (
+          <p role="alert" className="break-words rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
+          </p>
+        )}
 
         <DialogFooter className="flex-row justify-between">
           <div className="flex gap-2">
@@ -241,6 +272,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
             )}
           </div>
           <Button onClick={handleNext} disabled={saving || (step === 1 && !cpeUrl.trim())}>
+            {saving && <LoaderCircle className="mr-1 h-4 w-4 animate-spin" />}
             {saving ? '保存中…' : step === STEPS.length - 1 ? '开始使用' : step === 0 ? '开始配置' : '下一步'}
             {step < STEPS.length - 1 && <ChevronRight className="ml-1 h-4 w-4" />}
           </Button>

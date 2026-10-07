@@ -42,9 +42,11 @@ function Get-CpeMainWindow([int]$appProcessId) {
 $installer = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
 if (-not $installer) { throw '未找到安装包' }
 $installRoot = Join-Path $env:RUNNER_TEMP 'cpeye-smoke-install'
+if (Get-NetTCPConnection -LocalPort 3210 -State Listen -ErrorAction SilentlyContinue) { throw '3210 端口已被使用，不能开始安装验收' }
 $setup = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installRoot") -WindowStyle Hidden -PassThru -Wait
 if ($setup.ExitCode -ne 0) { throw '安装器执行失败' }
 $appProcess = $null
+$serverPid = $null
 try {
     $appProcess = Start-Process -FilePath (Join-Path $installRoot 'cpeye-desktop.exe') -WindowStyle Hidden -PassThru
     $healthy = $false
@@ -61,22 +63,33 @@ try {
         if (Test-Path $logPath) { Get-Content $logPath }
         throw '内置服务未能启动'
     }
-    $login = Invoke-WebRequest 'http://127.0.0.1:3210/login' -TimeoutSec 10
+    # 桌面模式无需登录；无 Cookie 直接访问核心页面和设置接口。
+    $dashboard = Invoke-WebRequest 'http://127.0.0.1:3210/dashboard' -MaximumRedirection 0 -TimeoutSec 10
+    $authMe = Invoke-WebRequest 'http://127.0.0.1:3210/api/auth/me' -TimeoutSec 5
+    $setupStatus = Invoke-WebRequest 'http://127.0.0.1:3210/api/system/setup-status' -TimeoutSec 5
+    $cpeConfig = Invoke-WebRequest 'http://127.0.0.1:3210/api/settings/cpe' -TimeoutSec 5
+    if ($dashboard.StatusCode -ne 200 -or $authMe.StatusCode -ne 200 -or $setupStatus.StatusCode -ne 200 -or $cpeConfig.StatusCode -ne 200) {
+        throw '桌面模式无密码访问验收失败'
+    }
+    if (($authMe.Content | ConvertFrom-Json).desktopMode -ne $true) { throw '内置服务未启用桌面模式' }
+    if (-not (($setupStatus.Content | ConvertFrom-Json).PSObject.Properties.Name -contains 'completed')) { throw '引导设置状态接口返回无效内容' }
+    if (-not (($cpeConfig.Content | ConvertFrom-Json).PSObject.Properties.Name -contains 'cpe_url')) { throw 'CPE 配置接口返回无效内容' }
     $firstRun = Invoke-RestMethod 'http://127.0.0.1:3210/api/system/first-run-password' -TimeoutSec 5
-    if ($login.StatusCode -ne 200 -or -not $firstRun.available) { throw '首次登录流程验收失败' }
+    if ($firstRun.PSObject.Properties.Name -contains 'password' -or $firstRun.available -ne $false) { throw '首次密码接口仍泄露管理员密码' }
+    $serverPid = (Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess
     $desktopLog = Join-Path $env:APPDATA 'com.cpeye.monitor/desktop-events.log'
-    function Get-LoginPageLoadCount {
+    function Get-DashboardPageLoadCount {
         if (-not (Test-Path $desktopLog)) { return 0 }
-        return [regex]::Matches([IO.File]::ReadAllText($desktopLog), '本地页面 Finished: /login').Count
+        return [regex]::Matches([IO.File]::ReadAllText($desktopLog), '本地页面 Finished: /dashboard').Count
     }
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
-        if ((Get-LoginPageLoadCount) -gt 0) { break }
+        if ((Get-DashboardPageLoadCount) -gt 0) { break }
         Start-Sleep -Milliseconds 500
     }
-    $initialPageLoads = Get-LoginPageLoadCount
+    $initialPageLoads = Get-DashboardPageLoadCount
     if ($initialPageLoads -eq 0) {
         if (Test-Path $desktopLog) { Get-Content $desktopLog }
-        throw '桌面窗口没有真正进入登录页'
+        throw '桌面窗口没有真正进入控制台'
     }
     # 关闭页面后释放 WebView，后台服务保持原进程；再次运行只恢复窗口。
     $script:cpeWindowTitle = $null
@@ -102,25 +115,36 @@ try {
     try {
         for ($attempt = 0; $attempt -lt 40; $attempt++) {
             $appProcess.Refresh()
-            if ((Get-CpeMainWindow $appProcess.Id) -ne [IntPtr]::Zero -and (Get-LoginPageLoadCount) -gt $initialPageLoads) { break }
+            if ((Get-CpeMainWindow $appProcess.Id) -ne [IntPtr]::Zero -and (Get-DashboardPageLoadCount) -gt $initialPageLoads) { break }
             Start-Sleep -Milliseconds 500
         }
-        if ((Get-CpeMainWindow $appProcess.Id) -eq [IntPtr]::Zero -or (Get-LoginPageLoadCount) -le $initialPageLoads) {
+        if ((Get-CpeMainWindow $appProcess.Id) -eq [IntPtr]::Zero -or (Get-DashboardPageLoadCount) -le $initialPageLoads) {
             if (Test-Path $desktopLog) { Get-Content $desktopLog }
-            throw '未能重新打开登录窗口'
+            throw '未能重新打开控制台窗口'
         }
         if ((Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess -ne $serverPid) { throw '重新打开窗口重启了后台服务' }
         if (-not $secondLaunch.WaitForExit(5000)) { throw '单实例检查失败' }
     } finally {
         if (-not $secondLaunch.HasExited) { Stop-Process -Id $secondLaunch.Id -Force }
     }
-    Write-Output '安装、服务、登录、首次密码、托盘后台及重新打开验收通过'
+    Write-Output '安装、服务、无密码控制台、核心 API、托盘后台及重新打开验收通过'
 } finally {
     if ($appProcess -and -not $appProcess.HasExited) {
         & taskkill.exe /PID $appProcess.Id /T /F | Out-Null
     }
     $uninstaller = Join-Path $installRoot 'uninstall.exe'
     if (Test-Path $uninstaller) {
-        Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -Wait
+        $uninstall = Start-Process -FilePath $uninstaller -ArgumentList '/S' -WindowStyle Hidden -PassThru -Wait
+        if ($uninstall.ExitCode -ne 0) { throw '测试安装卸载失败' }
     }
+    # NSIS 卸载器会启动临时进程，等待程序文件和监听端口完全释放。
+    for ($attempt = 0; $attempt -lt 20; $attempt++) {
+        if (-not (Test-Path (Join-Path $installRoot 'cpeye-desktop.exe')) -and -not (Get-NetTCPConnection -LocalPort 3210 -State Listen -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 500
+    }
+    if (Test-Path (Join-Path $installRoot 'cpeye-desktop.exe')) { throw '测试程序文件卸载后仍有残留' }
+    if (Get-NetTCPConnection -LocalPort 3210 -State Listen -ErrorAction SilentlyContinue) { throw '仍有测试服务占用 3210' }
+    if ($appProcess -and (Get-Process -Id $appProcess.Id -ErrorAction SilentlyContinue)) { throw '测试桌面程序进程未清理' }
+    if ($serverPid -and (Get-Process -Id $serverPid -ErrorAction SilentlyContinue)) { throw '测试服务进程未清理' }
+    Write-Output '测试安装已卸载，程序文件、进程和监听端口无残留'
 }

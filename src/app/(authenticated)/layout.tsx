@@ -20,6 +20,7 @@ export default function AuthenticatedLayout({
   children: React.ReactNode;
 }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [desktopMode, setDesktopMode] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [smsUnread, setSmsUnread] = useState(0);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -37,6 +38,8 @@ export default function AuthenticatedLayout({
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
+          const auth = await res.json();
+          setDesktopMode(auth.desktopMode === true);
           setIsAuthenticated(true);
           // Check setup status
           try {
@@ -116,7 +119,7 @@ export default function AuthenticatedLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <TopNav alertUnreadCount={unreadCount} onAlertBellClick={markAsRead} connectionStatus={sseStatus} />
+      <TopNav alertUnreadCount={unreadCount} onAlertBellClick={markAsRead} connectionStatus={sseStatus} showLogout={!desktopMode} />
       <main className="mx-auto max-w-screen-2xl px-3 pt-20 sm:px-5 lg:px-7 lg:pt-28 pb-20 lg:pb-[max(2.5rem,env(safe-area-inset-bottom))]">
         <ErrorBoundary>
           <AnimatePresence mode="wait" initial={false}>

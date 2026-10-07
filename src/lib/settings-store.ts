@@ -3,6 +3,7 @@ import type { TelegramConfig } from '@/lib/notifiers/telegram';
 import type { DingtalkConfig } from '@/lib/notifiers/dingtalk';
 import type { BarkConfig } from '@/lib/notifiers/bark';
 import type { PushplusConfig } from '@/lib/notifiers/pushplus';
+import { normalizeCpeUrl } from '@/lib/cpe-url';
 import {
   decryptSecureValue,
   encryptSecureValue,
@@ -145,6 +146,7 @@ export function upsertCpeConfig(input: {
   cpeUsername: string;
   cpePassword?: string | null;
 }): void {
+  const cpeUrl = normalizeCpeUrl(input.cpeUrl);
   const existing = getCpeConfigRow();
   const password = typeof input.cpePassword === 'string' && input.cpePassword.trim()
     ? input.cpePassword.trim()
@@ -157,7 +159,7 @@ export function upsertCpeConfig(input: {
     if (encryptedPassword) {
       updateCpeConfig({
         id: existing.id,
-        cpeUrl: input.cpeUrl,
+        cpeUrl,
         cpeUsername: input.cpeUsername,
         encryptedPassword,
       });
@@ -167,7 +169,7 @@ export function upsertCpeConfig(input: {
     if (existing.cpe_password_encrypted && !isEncryptedSecureValue(existing.cpe_password_encrypted)) {
       updateCpeConfig({
         id: existing.id,
-        cpeUrl: input.cpeUrl,
+        cpeUrl,
         cpeUsername: input.cpeUsername,
         encryptedPassword: encryptSecureValue(
           existing.cpe_password_encrypted,
@@ -179,7 +181,7 @@ export function upsertCpeConfig(input: {
 
     updateCpeConfig({
       id: existing.id,
-      cpeUrl: input.cpeUrl,
+      cpeUrl,
       cpeUsername: input.cpeUsername,
     });
     return;
@@ -190,7 +192,7 @@ export function upsertCpeConfig(input: {
   }
 
   insertCpeConfig({
-    cpeUrl: input.cpeUrl,
+    cpeUrl,
     cpeUsername: input.cpeUsername,
     encryptedPassword,
   });

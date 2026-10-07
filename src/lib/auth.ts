@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { compare } from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
+import { isDesktopMode, isLocalDesktopRequest } from '@/lib/desktop-auth';
 
 function resolveJwtSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET?.trim();
@@ -61,6 +62,10 @@ export async function verifyToken(token: string) {
 
 export async function getSession() {
   const cookieStore = await cookies();
+  if (isDesktopMode()) {
+    // 免密码仅允许桌面宿主的本机同源访问，拒绝其他网页触发管理操作。
+    return isLocalDesktopRequest(await headers()) ? { userId: 1, username: 'admin' } : null;
+  }
   const token = cookieStore.get('token')?.value;
   if (!token) return null;
   return verifyToken(token);
