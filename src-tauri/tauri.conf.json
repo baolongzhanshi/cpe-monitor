@@ -11,8 +11,8 @@
       {
         "label": "main",
         "title": "CPEye 5G CPE 监控",
-        "width": 1440,
-        "height": 960,
+        "width": 1280,
+        "height": 800,
         "minWidth": 1024,
         "minHeight": 720,
         "visible": true,
