@@ -57,18 +57,6 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4 sm:p-6">
-      {/* 静态背景装饰，避免页面空闲时持续渲染动画。 */}
-      <div
-        className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-brand/10 blur-3xl"
-      />
-      <div
-        className="absolute -right-32 bottom-1/4 h-96 w-96 rounded-full bg-info/10 blur-3xl"
-      />
-      <div
-        className="absolute left-1/2 top-1/3 h-64 w-64 -translate-x-1/2 rounded-full bg-brand/5 blur-3xl"
-      />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-brand/40 to-transparent" />
-
       <motion.div
         className="relative z-10 w-full max-w-md"
         initial={reduce ? undefined : { opacity: 0, scale: 0.92, y: 20 }}
@@ -79,7 +67,7 @@ export default function LoginPage() {
         }
         transition={{ type: 'spring', stiffness: 260, damping: 22 }}
       >
-        <Card className="border-white/80 bg-card/90 backdrop-blur-xl dark:border-border">
+        <Card className="border-border bg-card">
           <CardHeader className="space-y-3 text-center">
             <span
               className="mx-auto inline-flex size-14 items-center justify-center rounded-2xl bg-brand text-primary-foreground shadow-lg shadow-brand/20"
