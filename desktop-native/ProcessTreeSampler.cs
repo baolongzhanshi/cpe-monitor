@@ -35,8 +35,18 @@ internal sealed class ProcessTreeSampler : IDisposable
 
     internal void Start()
     {
-        lastSampleAt = DateTime.UtcNow;
-        lastCpuSeconds = SumTree().CpuSeconds;
+        // 灰度采样只是测试功能，任何测量失败都不允许影响应用启动。
+        try
+        {
+            lastSampleAt = DateTime.UtcNow;
+            lastCpuSeconds = SumTree().CpuSeconds;
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or System.ComponentModel.Win32Exception or NotSupportedException or IOException)
+        {
+            lastSampleAt = DateTime.UtcNow;
+            lastCpuSeconds = 0;
+        }
         timer.Start();
     }
 
@@ -137,12 +147,21 @@ internal sealed class ProcessTreeSampler : IDisposable
     /// <summary>通过 NtQueryInformationProcess 取父进程 ID，避免引入额外依赖。</summary>
     private static int? TryGetParentId(Process process)
     {
-        var info = new ProcessBasicInformation();
-        var size = Marshal.SizeOf<ProcessBasicInformation>();
-        var status = NtQueryInformationProcess(process.Handle, 0, ref info, size, out _);
-        if (status != 0) return null;
-        var parent = info.InheritedFromUniqueProcessId.ToInt64();
-        return parent is > 0 and <= int.MaxValue ? (int)parent : null;
+        try
+        {
+            var info = new ProcessBasicInformation();
+            var size = Marshal.SizeOf<ProcessBasicInformation>();
+            var status = NtQueryInformationProcess(process.Handle, 0, ref info, size, out _);
+            if (status != 0) return null;
+            var parent = info.InheritedFromUniqueProcessId.ToInt64();
+            return parent is > 0 and <= int.MaxValue ? (int)parent : null;
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            // 系统进程或其它用户的进程拿不到句柄，跳过即可，不能让它冒到启动流程。
+            return null;
+        }
     }
 
     public void Dispose()
