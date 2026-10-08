@@ -108,7 +108,7 @@ internal sealed class ModernMainForm : Form
             if (_configureBrowser is not null) await _configureBrowser(core);
             if (_disposed) return;
             core.NavigationCompleted += async (_, _) => await UpdateVisibilityAsync();
-            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.11");
+            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.12");
             _initialized = true;
             _loading.Visible = false;
             _webView.Visible = true;

@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>CPEMonitor</AssemblyName>
     <RootNamespace>CpeMonitor.Native</RootNamespace>
-    <Version>0.3.11</Version>
+    <Version>0.3.12</Version>
     <Product>CPE Monitor</Product>
     <Title>CPE Monitor</Title>
     <ApplicationIcon>../src-tauri/icons/icon.ico</ApplicationIcon>

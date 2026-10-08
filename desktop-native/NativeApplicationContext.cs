@@ -22,6 +22,7 @@ internal sealed class NativeApplicationContext : ApplicationContext
         _ = dispatcher.Handle;
         var menu = new ContextMenuStrip();
         menu.Items.Add("打开 CPE Monitor", null, (_, _) => ShowWindow());
+        menu.Items.Add("导出诊断信息", null, async (_, _) => await ExportDiagnosticsAsync());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("退出并停止同步", null, (_, _) => ExitThread());
         tray = new NotifyIcon { Text = "CPE Monitor 正在启动", Visible = true, ContextMenuStrip = menu, Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application };
@@ -103,6 +104,26 @@ internal sealed class NativeApplicationContext : ApplicationContext
             tray.ShowBalloonTip(5000);
         }
         catch (InvalidOperationException) { }
+    }
+
+    /// <summary>
+    /// 从本机后台取脱敏诊断报告并存到桌面，方便转发排查。
+    /// </summary>
+    private async Task ExportDiagnosticsAsync()
+    {
+        if (!ready || exiting) return;
+        try
+        {
+            var text = await api.GetTextAsync("/api/system/diagnostics", lifetime.Token);
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            var path = Path.Combine(desktop, $"CPE-Monitor-诊断-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+            File.WriteAllText(path, text);
+            MessageBox.Show($"诊断信息已保存到：\n{path}", "CPE Monitor", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception error) when (error is HttpRequestException or InvalidOperationException or IOException or UnauthorizedAccessException or OperationCanceledException)
+        {
+            MessageBox.Show($"导出诊断信息失败：{error.Message}", "CPE Monitor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
     private void ShowWindow()
     {
