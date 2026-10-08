@@ -49,7 +49,7 @@ Windows 客户端在软件窗口内展示现代页面，不打开外部浏览器
 
 ### 从源码构建 Windows 安装包
 
-推荐使用仓库内的 GitHub Actions `Windows 原生安装包` 工作流。它在 Windows 构建机上使用 .NET 10、下载与项目 Node ABI 匹配的 Node 运行时、构建本地后台和现代页面宿主，并产出 `CPEMonitor_0.3.8_x64-setup.exe`。本机手工构建需要 .NET 10 SDK、NSIS 和 `CPE_NODE_RUNTIME` 指向 Windows x64 的 `node.exe`，例如：
+推荐使用仓库内的 GitHub Actions `Windows 原生安装包` 工作流。它在 Windows 构建机上使用 .NET 10、下载与项目 Node ABI 匹配的 Node 运行时、构建本地后台和现代页面宿主，并产出 `CPEMonitor_0.3.9_x64-setup.exe`。本机手工构建需要 .NET 10 SDK、NSIS 和 `CPE_NODE_RUNTIME` 指向 Windows x64 的 `node.exe`，例如：
 
 ```powershell
 npm ci

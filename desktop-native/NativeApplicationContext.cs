@@ -10,6 +10,8 @@ internal sealed class NativeApplicationContext : ApplicationContext
     private readonly EventWaitHandle exitEvent = new(false, EventResetMode.AutoReset, "Local\\CPEMonitor.Exit");
     private readonly NotifyIcon tray;
     private readonly Thread receiver;
+    private readonly System.Windows.Forms.Timer smsWatcher;
+    private int? lastSmsUnread;
     private Form? window;
     private bool ready;
     private bool needsSetup;
@@ -24,6 +26,16 @@ internal sealed class NativeApplicationContext : ApplicationContext
         menu.Items.Add("退出并停止同步", null, (_, _) => ExitThread());
         tray = new NotifyIcon { Text = "CPE Monitor 正在启动", Visible = true, ContextMenuStrip = menu, Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? SystemIcons.Application };
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
+        // 点击提醒直接打开短信页，省掉一次手动导航。
+        tray.BalloonTipClicked += (_, _) =>
+        {
+            ShowWindow();
+            if (window is ModernMainForm { Ready: true } modern && modern.Browser is { } browser)
+            {
+                try { browser.Navigate($"http://127.0.0.1:{ServerHost.Port}/sms"); }
+                catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException or System.Runtime.InteropServices.COMException) { }
+            }
+        };
         receiver = new Thread(() =>
         {
             // 同时等待“显示窗口”和“请退出”两个信号；后者供安装器在覆盖安装前请求程序自行退出。
@@ -41,6 +53,10 @@ internal sealed class NativeApplicationContext : ApplicationContext
             }
         }) { IsBackground = true, Name = "CPE Monitor 单实例通知" };
         receiver.Start();
+        // 新短信到达时在本机提醒：推送走 PushPlus，但应用开着时用户在本机也应该有反馈。
+        smsWatcher = new System.Windows.Forms.Timer { Interval = 10_000 };
+        smsWatcher.Tick += async (_, _) => await CheckNewSmsAsync();
+        smsWatcher.Start();
         var startup = new System.Windows.Forms.Timer { Interval = 1 };
         startup.Tick += async (_, _) =>
         {
@@ -56,6 +72,37 @@ internal sealed class NativeApplicationContext : ApplicationContext
             catch (Exception error) { if (!exiting) { MessageBox.Show(error.Message, "CPE Monitor 启动失败", MessageBoxButtons.OK, MessageBoxIcon.Error); ExitThread(); } }
         };
         startup.Start();
+    }
+
+    /// <summary>
+    /// 轮询本机后台的未读短信数。首次只记录基线，避免启动时为历史未读弹窗；
+    /// 之后只在数量增加时提醒一次。
+    /// </summary>
+    private async Task CheckNewSmsAsync()
+    {
+        if (!ready || exiting) return;
+        try
+        {
+            var response = await api.GetAsync("/api/dashboard/sms?page=1&pageSize=1", lifetime.Token);
+            var unread = (int)JsonValues.Number(response, "unread");
+            if (lastSmsUnread is null) { lastSmsUnread = unread; return; }
+            if (unread > lastSmsUnread) ShowNewSmsTip(unread - lastSmsUnread.Value);
+            lastSmsUnread = unread;
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error) when (error is HttpRequestException or InvalidOperationException) { }
+    }
+
+    private void ShowNewSmsTip(int count)
+    {
+        try
+        {
+            tray.BalloonTipTitle = "CPE Monitor";
+            tray.BalloonTipText = count > 1 ? $"收到 {count} 条新短信" : "收到 1 条新短信";
+            tray.BalloonTipIcon = ToolTipIcon.Info;
+            tray.ShowBalloonTip(5000);
+        }
+        catch (InvalidOperationException) { }
     }
     private void ShowWindow()
     {
@@ -84,7 +131,7 @@ internal sealed class NativeApplicationContext : ApplicationContext
             window?.Dispose(); tray.Visible = false;
             var menu = tray.ContextMenuStrip;
             var icon = tray.Icon;
-            tray.Dispose(); menu?.Dispose(); icon?.Dispose(); dispatcher.Dispose(); api.Dispose(); host.Dispose(); lifetime.Dispose(); showEvent.Dispose(); exitEvent.Dispose();
+            smsWatcher.Dispose(); tray.Dispose(); menu?.Dispose(); icon?.Dispose(); dispatcher.Dispose(); api.Dispose(); host.Dispose(); lifetime.Dispose(); showEvent.Dispose(); exitEvent.Dispose();
         }
         base.Dispose(disposing);
     }
