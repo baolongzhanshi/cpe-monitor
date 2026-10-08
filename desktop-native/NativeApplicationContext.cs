@@ -7,6 +7,7 @@ internal sealed class NativeApplicationContext : ApplicationContext
     private readonly CancellationTokenSource lifetime = new();
     private readonly Control dispatcher = new();
     private readonly EventWaitHandle showEvent = new(false, EventResetMode.AutoReset, "Local\\CPEMonitor.ShowWindow");
+    private readonly EventWaitHandle exitEvent = new(false, EventResetMode.AutoReset, "Local\\CPEMonitor.Exit");
     private readonly NotifyIcon tray;
     private readonly Thread receiver;
     private Form? window;
@@ -25,11 +26,18 @@ internal sealed class NativeApplicationContext : ApplicationContext
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowWindow(); };
         receiver = new Thread(() =>
         {
+            // 同时等待“显示窗口”和“请退出”两个信号；后者供安装器在覆盖安装前请求程序自行退出。
+            var signals = new WaitHandle[] { showEvent, exitEvent };
             while (!exiting)
             {
-                showEvent.WaitOne();
+                var signaled = WaitHandle.WaitAny(signals);
                 if (exiting) break;
-                try { dispatcher.BeginInvoke((Action)ShowWindow); } catch (InvalidOperationException) { break; }
+                try
+                {
+                    if (signaled == 0) dispatcher.BeginInvoke((Action)ShowWindow);
+                    else dispatcher.BeginInvoke((Action)ExitThread);
+                }
+                catch (InvalidOperationException) { break; }
             }
         }) { IsBackground = true, Name = "CPE Monitor 单实例通知" };
         receiver.Start();
@@ -76,7 +84,7 @@ internal sealed class NativeApplicationContext : ApplicationContext
             window?.Dispose(); tray.Visible = false;
             var menu = tray.ContextMenuStrip;
             var icon = tray.Icon;
-            tray.Dispose(); menu?.Dispose(); icon?.Dispose(); dispatcher.Dispose(); api.Dispose(); host.Dispose(); lifetime.Dispose(); showEvent.Dispose();
+            tray.Dispose(); menu?.Dispose(); icon?.Dispose(); dispatcher.Dispose(); api.Dispose(); host.Dispose(); lifetime.Dispose(); showEvent.Dispose(); exitEvent.Dispose();
         }
         base.Dispose(disposing);
     }

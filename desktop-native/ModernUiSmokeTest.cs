@@ -61,6 +61,8 @@ internal static class ModernUiSmokeTest
                 report["documentVisibility"] = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("document.visibilityState")) ?? "";
                 report["hostVisibleFlag"] = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("String(window.__CPE_MONITOR_VISIBLE__)")) ?? "";
                 report["fixtureStreams"] = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("String(window.__fixtureStreams)")) ?? "";
+                // 标题栏是否跟随深色：null 表示当前系统/DWM 组合无法读取。
+                report["titleBarDarkMode"] = WindowTheme.IsWindowDark(form.Handle);
                 var firstRates = string.Join("|", Regex.Matches(text, @"\d+(?:\.\d+)?\s*Mbps").Select(match => match.Value));
                 await Task.Delay(2_500);
                 var secondText = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("document.body.innerText")) ?? "";

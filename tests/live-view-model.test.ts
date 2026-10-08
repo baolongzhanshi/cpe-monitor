@@ -91,7 +91,7 @@ test('4 秒以上旧样本及失败样本不显示绿色实时标记', () => {
   assert.equal(isLiveSampleFresh(new Date(time + 6000), false, time), false);
 });
 
-test('合并 SQLite 历史时间与 ISO 事件时不重复边界、不篡改原历史', () => {
+test('合并历史与实时序列时末尾只追加当前速率一个点，且不篡改原历史', () => {
   const history = [
     { timestamp: '2026-10-07 16:00:00', downloadBps: 1000 },
     { timestamp: '2026-10-07 16:30:00', downloadBps: 2000 },
@@ -101,7 +101,9 @@ test('合并 SQLite 历史时间与 ISO 事件时不重复边界、不篡改原�
     { timestamp: '2026-10-07T16:30:01.000Z', downloadBps: 4000 },
   ];
   const combined = mergeLiveChartHistory(history, live);
-  assert.deepEqual(combined.map((point) => point.downloadBps), [1000, 3000, 4000]);
+  // 历史点按原有采样保留（含与实时段同分钟的那条），末尾只补当前速率。
+  // 之前把每秒一条的实时点整段并入，会让末尾占掉大块宽度、刻度重复。
+  assert.deepEqual(combined.map((point) => point.downloadBps), [1000, 2000, 4000]);
   assert.equal(history.length, 2);
   assert.equal(mergeLiveChartHistory(history, []), history);
 });

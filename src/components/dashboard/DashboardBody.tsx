@@ -105,12 +105,15 @@ function LiveTop() {
               >
                 {lastRefreshStale ? '最近一次数据' : overview?.source === 'cpe' ? '实时 CPE 数据' : '数据库兜底数据'}
               </Badge>
-              <RefreshButton
-                onClick={() => { void refreshDashboard(); }}
-                loading={refreshing}
-                label="刷新数据"
-                loadingLabel="刷新中"
-              />
+              {/* 实时推送正常时不再占用按钮位置；断线或数据过期才显示手动刷新。 */}
+              {lastRefreshStale || sseStatus !== 'connected' ? (
+                <RefreshButton
+                  onClick={() => { void refreshDashboard(); }}
+                  loading={refreshing}
+                  label="刷新数据"
+                  loadingLabel="刷新中"
+                />
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"

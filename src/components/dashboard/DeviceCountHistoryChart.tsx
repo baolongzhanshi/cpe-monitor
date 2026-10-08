@@ -15,7 +15,8 @@ import {
   Tooltip,
 } from 'chart.js';
 import type { TrafficHistoryPoint } from '@/hooks/useDashboardData';
-import { parseDateTime } from '@/lib/date-time';
+import { parseTimestampMs } from '@/lib/date-time';
+import { formatTimeAxisLabel } from '@/lib/chart-time-axis';
 
 ChartJS.register(
   CategoryScale,
@@ -60,18 +61,20 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
     return () => window.cancelAnimationFrame(frame);
   }, [resolvedTheme, hue]);
 
+  // 图表跨度决定刻度格式；时间轴按真实时间摆放采样点。
+  const spanMs = useMemo(() => {
+    const first = parseTimestampMs(data[0]?.timestamp);
+    const last = parseTimestampMs(data[data.length - 1]?.timestamp);
+    return first !== null && last !== null ? last - first : 0;
+  }, [data]);
+
   const chartData = useMemo(() => ({
-    labels: data.map((entry) => parseDateTime(entry.timestamp)
-      ?.toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Shanghai',
-      }) || '-'),
     datasets: [{
       label: '在线设备',
-      data: data.map((entry) => entry.connectedDevices ?? null),
+      data: data.map((entry) => ({
+        x: parseTimestampMs(entry.timestamp) ?? 0,
+        y: entry.connectedDevices ?? null,
+      })),
       borderColor: colors.line,
       backgroundColor: `color-mix(in oklch, ${colors.line} 16%, transparent)`,
       fill: true,
@@ -100,6 +103,11 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
         borderColor: colors.border,
         borderWidth: 1,
         callbacks: {
+          title: (items: { parsed: { x: number | null } }[]) => (
+            items.length && items[0].parsed.x !== null
+              ? formatTimeAxisLabel(items[0].parsed.x, spanMs)
+              : ''
+          ),
           label: (context: { parsed: { y: number | null } }) => (
             `在线设备：${context.parsed.y ?? 0} 台`
           ),
@@ -108,6 +116,7 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
     },
     scales: {
       x: {
+        type: 'linear' as const,
         grid: {
           color: `color-mix(in oklch, ${colors.border} 65%, transparent)`,
         },
@@ -116,6 +125,7 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit: 7,
+          callback: (value: string | number) => formatTimeAxisLabel(Number(value), spanMs),
         },
       },
       y: {
@@ -136,7 +146,7 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
         },
       },
     },
-  }), [colors, data]);
+  }), [colors, data, spanMs]);
 
   return <Line data={chartData} options={options} />;
 }

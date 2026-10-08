@@ -15,7 +15,8 @@ import {
   Tooltip,
 } from 'chart.js';
 import type { TrafficHistoryPoint } from '@/hooks/useDashboardData';
-import { parseDateTime, parseTimestampMs } from '@/lib/date-time';
+import { parseTimestampMs } from '@/lib/date-time';
+import { formatTimeAxisLabel } from '@/lib/chart-time-axis';
 
 ChartJS.register(
   CategoryScale,
@@ -67,17 +68,6 @@ function readThemeColors(): ThemeColors {
   };
 }
 
-function formatLabel(timestamp: string, showDate: boolean): string {
-  const date = parseDateTime(timestamp);
-  return date?.toLocaleString('zh-CN', {
-    month: showDate ? '2-digit' : undefined,
-    day: showDate ? '2-digit' : undefined,
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Asia/Shanghai',
-  }) || '-';
-}
-
 export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
   const { resolvedTheme } = useTheme();
   const { hue } = useThemeColor();
@@ -93,20 +83,21 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
     return () => window.cancelAnimationFrame(frame);
   }, [resolvedTheme, hue]);
 
-  const chartData = useMemo(() => {
-    const first = data[0]?.timestamp;
-    const last = data[data.length - 1]?.timestamp;
-    const spanMs = first && last
-      ? (parseTimestampMs(last) ?? 0) - (parseTimestampMs(first) ?? 0)
-      : 0;
-    const showDate = spanMs > 24 * 60 * 60 * 1000;
+  // 图表跨度决定刻度格式；时间轴按真实时间摆放采样点。
+  const spanMs = useMemo(() => {
+    const first = parseTimestampMs(data[0]?.timestamp);
+    const last = parseTimestampMs(data[data.length - 1]?.timestamp);
+    return first !== null && last !== null ? last - first : 0;
+  }, [data]);
 
+  const chartData = useMemo(() => {
+    const points = (pick: (entry: TrafficHistoryPoint) => number | null | undefined) =>
+      data.map((entry) => ({ x: parseTimestampMs(entry.timestamp) ?? 0, y: pick(entry) ?? null }));
     return {
-      labels: data.map((entry) => formatLabel(entry.timestamp, showDate)),
       datasets: [
         ...(visible.rsrp ? [{
           label: 'RSRP',
-          data: data.map((entry) => entry.rsrp ?? null),
+          data: points((entry) => entry.rsrp),
           borderColor: colors.rsrp,
           backgroundColor: `color-mix(in oklch, ${colors.rsrp} 10%, transparent)`,
           yAxisID: 'dbm',
@@ -118,7 +109,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         }] : []),
         ...(visible.rssi ? [{
           label: 'RSSI',
-          data: data.map((entry) => entry.rssi ?? null),
+          data: points((entry) => entry.rssi),
           borderColor: colors.rssi,
           backgroundColor: `color-mix(in oklch, ${colors.rssi} 10%, transparent)`,
           yAxisID: 'dbm',
@@ -130,7 +121,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         }] : []),
         ...(visible.rsrq ? [{
           label: 'RSRQ',
-          data: data.map((entry) => entry.rsrq ?? null),
+          data: points((entry) => entry.rsrq),
           borderColor: colors.rsrq,
           backgroundColor: `color-mix(in oklch, ${colors.rsrq} 10%, transparent)`,
           yAxisID: 'db',
@@ -142,7 +133,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         }] : []),
         ...(visible.sinr ? [{
           label: 'SINR',
-          data: data.map((entry) => entry.sinr ?? null),
+          data: points((entry) => entry.sinr),
           borderColor: colors.sinr,
           backgroundColor: `color-mix(in oklch, ${colors.sinr} 10%, transparent)`,
           yAxisID: 'db',
@@ -182,6 +173,11 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         borderColor: colors.border,
         borderWidth: 1,
         callbacks: {
+          title: (items: { parsed: { x: number | null } }[]) => (
+            items.length && items[0].parsed.x !== null
+              ? formatTimeAxisLabel(items[0].parsed.x, spanMs)
+              : ''
+          ),
           label: (context: TooltipContext) => {
             const unit = context.dataset.label === 'RSRP' || context.dataset.label === 'RSSI'
               ? 'dBm'
@@ -193,6 +189,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
     },
     scales: {
       x: {
+        type: 'linear' as const,
         grid: {
           color: `color-mix(in oklch, ${colors.border} 65%, transparent)`,
         },
@@ -201,6 +198,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit: 8,
+          callback: (value: string | number) => formatTimeAxisLabel(Number(value), spanMs),
         },
       },
       dbm: {
@@ -232,7 +230,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         },
       },
     },
-  }), [colors]);
+  }), [colors, spanMs]);
 
   return (
     <div className="flex h-full flex-col gap-2">

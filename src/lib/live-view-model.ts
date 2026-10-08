@@ -79,11 +79,15 @@ export function mergeLiveChartHistory(
   live: TrafficHistoryPoint[],
 ): TrafficHistoryPoint[] {
   if (!live.length) return history;
-  const firstLiveMs = parseTimestampMs(live[0].timestamp);
-  if (firstLiveMs === null) return history;
-  // 历史窗口保留原有采样；当前窗口只追加最多三分钟的真实速率点。
+  const tail = live[live.length - 1];
+  const tailMs = parseTimestampMs(tail.timestamp);
+  if (tailMs === null) return history;
+  // 历史窗口保留原有采样，末尾只追加“当前速率”这一个点。
+  // 之前把每秒一条的实时点整段并入历史序列：历史是 5~60 分钟一个点，
+  // 末尾却多出上百个一秒点，配合类目轴等距摆放会让最后几秒占掉大块宽度、
+  // 刻度重复成同一分钟，曲线形状也被实时段主导。
   return [...history.filter((point) => {
     const timestampMs = parseTimestampMs(point.timestamp);
-    return timestampMs !== null && timestampMs < firstLiveMs;
-  }), ...live];
+    return timestampMs !== null && timestampMs < tailMs;
+  }), tail];
 }

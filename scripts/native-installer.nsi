@@ -7,7 +7,7 @@ ManifestDPIAware true
 !include "x64.nsh"
 
 !ifndef PRODUCT_VERSION
-  !define PRODUCT_VERSION "0.3.2"
+  !define PRODUCT_VERSION "0.3.6"
 !endif
 !ifndef INPUT_DIR
   !define INPUT_DIR "native-dist\payload"
@@ -47,9 +47,41 @@ VIAddVersionKey /LANG=2052 "LegalCopyright" "CPE Monitor"
 !macro EnsureNativeClosed PREFIX
 Function ${PREFIX}EnsureNativeClosed
   System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "Local\CPEMonitor.Native") p.r0'
+  ${If} $0 == 0
+    Return
+  ${EndIf}
+  System::Call 'kernel32::CloseHandle(p r0)'
+
+  ; 已有实例在运行：先请它自己退出（与托盘“退出并停止同步”同一条清理路径），
+  ; 等待超时后再强制结束进程树，然后继续安装，避免要求用户手动去托盘退出。
+  DetailPrint "检测到 CPE Monitor 正在运行，正在请求它退出…"
+  System::Call 'kernel32::OpenEventW(i 0x0002, i 0, w "Local\CPEMonitor.Exit") p.r1'
+  ${If} $1 != 0
+    System::Call 'kernel32::SetEvent(p r1)'
+    System::Call 'kernel32::CloseHandle(p r1)'
+  ${EndIf}
+
+  StrCpy $2 0
+  ${Do}
+    Sleep 500
+    System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "Local\CPEMonitor.Native") p.r0'
+    ${If} $0 == 0
+      DetailPrint "CPE Monitor 已退出，继续安装。"
+      Return
+    ${EndIf}
+    System::Call 'kernel32::CloseHandle(p r0)'
+    IntOp $2 $2 + 1
+  ${LoopWhile} $2 < 20
+
+  DetailPrint "程序未在等待时间内退出，正在强制结束进程…"
+  nsExec::ExecToLog 'taskkill /IM CPEMonitor.exe /T /F'
+  Pop $0
+  Sleep 1500
+
+  System::Call 'kernel32::OpenMutexW(i 0x00100000, i 0, w "Local\CPEMonitor.Native") p.r0'
   ${If} $0 != 0
     System::Call 'kernel32::CloseHandle(p r0)'
-    MessageBox MB_ICONSTOP "CPE Monitor 正在运行。请从本程序托盘菜单选择退出后重试。安装或卸载不会自动停止程序。" /SD IDOK
+    MessageBox MB_ICONSTOP "无法停止正在运行的 CPE Monitor。请在任务管理器中结束 CPEMonitor.exe 后重试。" /SD IDOK
     SetErrorLevel 2
     Abort
   ${EndIf}

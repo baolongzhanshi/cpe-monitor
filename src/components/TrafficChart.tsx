@@ -15,13 +15,14 @@ import {
 } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import 'hammerjs';
-import { parseDateTime, parseTimestampMs } from '@/lib/date-time';
+import { parseTimestampMs } from '@/lib/date-time';
 import {
   useChartTheme,
   buildTooltipOptions,
   buildLegendOptions,
   CHART_DEFAULTS,
 } from '@/lib/chart-theme';
+import { formatTimeAxisLabel } from '@/lib/chart-time-axis';
 
 ChartJS.register(
   CategoryScale,
@@ -59,30 +60,28 @@ export function TrafficChart({ data }: TrafficChartProps) {
   const toMegabitsPerSecond = (bitsPerSecond: number | null | undefined) =>
     Number(((bitsPerSecond || 0) / 1_000_000).toFixed(3));
 
+  // 图表跨度决定刻度与提示的时间格式。
+  const spanMs = useMemo(() => {
+    const first = parseTimestampMs(data[0]?.timestamp);
+    const last = parseTimestampMs(data[data.length - 1]?.timestamp);
+    return first !== null && last !== null ? last - first : 0;
+  }, [data]);
+
   const chartData = useMemo(
     () => {
-      const firstTimestamp = data[0]?.timestamp;
-      const lastTimestamp = data[data.length - 1]?.timestamp;
-      const spanMs = firstTimestamp && lastTimestamp
-        ? (parseTimestampMs(lastTimestamp) ?? 0) - (parseTimestampMs(firstTimestamp) ?? 0)
-        : 0;
+      // 用 {x, y} 时间点而不是类目下标：历史采样间隔并不相等，
+      // 按序号等距摆放会把 5 分钟和 60 分钟的间隔画成一样宽，时间轴不会。
+      const points = (pick: (entry: TrafficData) => number | null | undefined) =>
+        data.map((entry) => ({
+          x: parseTimestampMs(entry.timestamp) ?? 0,
+          y: toMegabitsPerSecond(pick(entry)),
+        }));
 
       return ({
-      labels: data.map((entry) => {
-        const date = parseDateTime(entry.timestamp);
-        return date?.toLocaleString('zh-CN', {
-          month: spanMs > 24 * 60 * 60 * 1000 ? '2-digit' : undefined,
-          day: spanMs > 24 * 60 * 60 * 1000 ? '2-digit' : undefined,
-          hour: '2-digit',
-          minute: spanMs <= 7 * 24 * 60 * 60 * 1000 ? '2-digit' : undefined,
-          second: spanMs < 5 * 60 * 1000 ? '2-digit' : undefined,
-          timeZone: 'Asia/Shanghai',
-        }) || '-';
-      }),
       datasets: [
         {
           label: '下载',
-          data: data.map((entry) => toMegabitsPerSecond(entry.downloadBps)),
+          data: points((entry) => entry.downloadBps),
           borderColor: themeColors.primary,
           backgroundColor: `color-mix(in oklch, ${themeColors.primary} ${DOWNLOAD_FILL_ALPHA}%, transparent)`,
           fill: true,
@@ -93,7 +92,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
         },
         {
           label: '上传',
-          data: data.map((entry) => toMegabitsPerSecond(entry.uploadBps)),
+          data: points((entry) => entry.uploadBps),
           borderColor: themeColors.secondary,
           backgroundColor: `color-mix(in oklch, ${themeColors.secondary} ${UPLOAD_FILL_ALPHA}%, transparent)`,
           fill: true,
@@ -125,6 +124,9 @@ export function TrafficChart({ data }: TrafficChartProps) {
         tooltip: {
           ...buildTooltipOptions(themeColors),
           callbacks: {
+            title: (items: { parsed: { x: number | null } }[]) => (
+              items.length && items[0].parsed.x !== null ? formatTimeAxisLabel(items[0].parsed.x, spanMs) : ''
+            ),
             label: (context: { dataset: { label?: string }; parsed: { y: number | null } }) => {
               return `${context.dataset.label || ''}: ${context.parsed.y ?? 0} Mbps`;
             },
@@ -157,10 +159,15 @@ export function TrafficChart({ data }: TrafficChartProps) {
       },
       scales: {
         x: {
+          type: 'linear' as const,
           grid: {
             color: `color-mix(in oklch, ${themeColors.border} 70%, transparent)`,
           },
-          ticks: { color: themeColors.muted, maxRotation: 0 },
+          ticks: {
+            color: themeColors.muted,
+            maxRotation: 0,
+            callback: (value: string | number) => formatTimeAxisLabel(Number(value), spanMs),
+          },
         },
         y: {
           beginAtZero: true,
@@ -176,7 +183,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
         },
       },
     }),
-    [themeColors, data],
+    [themeColors, data, spanMs],
   );
 
   return <Line data={chartData} options={options} />;

@@ -1,5 +1,6 @@
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using System.Text.Json;
 
 namespace CpeMonitor.Native;
 
@@ -21,6 +22,7 @@ internal sealed class ModernMainForm : Form
     private bool _suspended;
     private bool _updatingVisibility;
     private bool _visibilityPending;
+    private bool? _pageDarkTheme;
     private readonly Func<CoreWebView2, Task>? _configureBrowser;
     internal Microsoft.Web.WebView2.Core.CoreWebView2? Browser => _webView.CoreWebView2;
     internal bool Ready => _initialized;
@@ -68,6 +70,23 @@ internal sealed class ModernMainForm : Form
             core.Settings.IsGeneralAutofillEnabled = false;
             await core.AddScriptToExecuteOnDocumentCreatedAsync("window.__CPE_MONITOR_DESKTOP__ = true; window.__CPE_MONITOR_VISIBLE__ = true;");
             if (_disposed) return;
+            // 页面会汇报实际生效的主题；标题栏跟随页面，页面跟随系统时即等于跟随系统。
+            core.WebMessageReceived += (_, args) =>
+            {
+                try
+                {
+                    using var message = JsonDocument.Parse(args.WebMessageAsJson);
+                    var root = message.RootElement;
+                    if (root.TryGetProperty("type", out var type) && type.GetString() == "theme"
+                        && root.TryGetProperty("dark", out var dark)
+                        && (dark.ValueKind == JsonValueKind.True || dark.ValueKind == JsonValueKind.False))
+                    {
+                        _pageDarkTheme = dark.GetBoolean();
+                        ApplyWindowTheme();
+                    }
+                }
+                catch (JsonException) { }
+            };
             core.NavigationStarting += (_, args) =>
             {
                 var port = ServerHost.Port;
@@ -89,7 +108,7 @@ internal sealed class ModernMainForm : Form
             if (_configureBrowser is not null) await _configureBrowser(core);
             if (_disposed) return;
             core.NavigationCompleted += async (_, _) => await UpdateVisibilityAsync();
-            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.2");
+            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.6");
             _initialized = true;
             _loading.Visible = false;
             _webView.Visible = true;
@@ -165,5 +184,24 @@ internal sealed class ModernMainForm : Form
             _loading.Dispose();
         }
         base.Dispose(disposing);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        ApplyWindowTheme();
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        // WM_SETTINGCHANGE：系统主题或个性化设置变化时重新应用标题栏配色。
+        if (m.Msg == 0x001A && !_disposed) ApplyWindowTheme();
+    }
+
+    private void ApplyWindowTheme()
+    {
+        if (_disposed || !IsHandleCreated) return;
+        WindowTheme.Apply(Handle, _pageDarkTheme ?? WindowTheme.IsSystemDark());
     }
 }

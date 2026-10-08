@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useRouter } from 'next/navigation';
-import { AnimatePresence } from 'framer-motion';
 import { TopNav } from '@/components/TopNav';
 import { BottomTabBar } from '@/components/BottomTabBar';
 import { PageTransition } from '@/components/motion';
@@ -139,11 +138,14 @@ export default function AuthenticatedLayout({
       <TopNav alertUnreadCount={unreadCount} onAlertBellClick={markAsRead} connectionStatus={sseStatus} showLogout={!desktopMode} />
       <main className="mx-auto max-w-screen-2xl px-3 pt-20 sm:px-5 lg:px-7 lg:pt-28 pb-20 lg:pb-[max(2.5rem,env(safe-area-inset-bottom))]">
         <ErrorBoundary>
-          <AnimatePresence mode="wait" initial={false}>
-            <PageTransition key={pathname}>
-              {children}
-            </PageTransition>
-          </AnimatePresence>
+          {/*
+            不要用 AnimatePresence mode="wait" 等待离场动画：
+            窗口被宿主挂起时渲染进程停止推进，离场动画永远播不完，
+            新页面就不会挂载，只剩导航栏、内容区一片空白。
+          */}
+          <PageTransition key={pathname}>
+            {children}
+          </PageTransition>
         </ErrorBoundary>
       </main>
       <BottomTabBar smsUnread={smsUnread} alertUnread={unreadCount} />
