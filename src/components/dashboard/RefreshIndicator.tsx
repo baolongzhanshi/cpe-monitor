@@ -20,7 +20,6 @@ export function RefreshIndicator({
   lastRefreshAt,
   lastRefreshStale = false,
   pollIntervalMs = 2_000,
-  collectionIntervalMs = 1_000,
   className,
 }: RefreshIndicatorProps) {
   const pageVisible = usePageVisibility();
@@ -51,17 +50,19 @@ export function RefreshIndicator({
       ) : (
         <span>等待首次采集</span>
       )}
-      <span className="text-muted-foreground/70">
-        {!pageVisible
-          ? '页面刷新已暂停'
-          : lastRefreshAt && !fresh
-            ? '显示最近一次数据'
-            : sseStatus === 'connected'
-              ? `约 ${Math.round(collectionIntervalMs / 1000)} 秒采集 · 实时推送`
-              : `断线兜底 ${Math.round(pollIntervalMs / 1000)} 秒`}
-      </span>
-      {pageVisible && sseStatus === 'connecting' ? (
-        <span className="text-muted-foreground/70">事件连接中</span>
+      {/* 一切正常时只留圆点和时间；状态文字只在异常时出现，避免同一件事说三遍。 */}
+      {!pageVisible || !lastRefreshAt || !fresh || sseStatus !== 'connected' ? (
+        <span className="text-muted-foreground/70">
+          {!pageVisible
+            ? '页面刷新已暂停'
+            : !lastRefreshAt
+              ? '等待首次采集'
+              : !fresh
+                ? '显示最近一次数据'
+                : sseStatus === 'connecting'
+                  ? '事件连接中'
+                  : `断线兜底 ${Math.round(pollIntervalMs / 1000)} 秒`}
+        </span>
       ) : null}
     </span>
   );

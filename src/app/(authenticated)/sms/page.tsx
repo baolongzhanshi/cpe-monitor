@@ -1,5 +1,8 @@
 'use client';
 
+/** 单次最多渲染的短信条数：无限滚动不再无限堆积 DOM，避免滚动久了变卡。 */
+const SMS_MAX_RENDERED = 600;
+
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { BarChart3, Mail, MessageSquareText, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Smartphone, X } from 'lucide-react';
@@ -136,6 +139,8 @@ export default function SmsPage() {
             return true;
           });
         }
+        // 列表按时间倒序，超出上限时丢弃最早的那些。
+        if (next.length > SMS_MAX_RENDERED) next = next.slice(0, SMS_MAX_RENDERED);
         const unchanged = next.length === prev.length && next.every((message, index) => {
           const previous = prev[index];
           return previous.id === message.id && previous.phone === message.phone
