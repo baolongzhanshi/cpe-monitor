@@ -16,7 +16,7 @@ import {
 } from 'chart.js';
 import type { TrafficHistoryPoint } from '@/hooks/useDashboardData';
 import { parseTimestampMs } from '@/lib/date-time';
-import { formatTimeAxisLabel } from '@/lib/chart-time-axis';
+import { formatTimeAxisLabel, getTimeAxisExtent } from '@/lib/chart-time-axis';
 
 ChartJS.register(
   CategoryScale,
@@ -83,12 +83,8 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
     return () => window.cancelAnimationFrame(frame);
   }, [resolvedTheme, hue]);
 
-  // 图表跨度决定刻度格式；时间轴按真实时间摆放采样点。
-  const spanMs = useMemo(() => {
-    const first = parseTimestampMs(data[0]?.timestamp);
-    const last = parseTimestampMs(data[data.length - 1]?.timestamp);
-    return first !== null && last !== null ? last - first : 0;
-  }, [data]);
+  // 数据实际时间范围：时间轴按真实时间摆放采样点，并按它收边。
+  const extent = useMemo(() => getTimeAxisExtent(data), [data]);
 
   const chartData = useMemo(() => {
     const points = (pick: (entry: TrafficHistoryPoint) => number | null | undefined) =>
@@ -175,7 +171,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         callbacks: {
           title: (items: { parsed: { x: number | null } }[]) => (
             items.length && items[0].parsed.x !== null
-              ? formatTimeAxisLabel(items[0].parsed.x, spanMs)
+              ? formatTimeAxisLabel(items[0].parsed.x, extent.spanMs)
               : ''
           ),
           label: (context: TooltipContext) => {
@@ -190,6 +186,8 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
     scales: {
       x: {
         type: 'linear' as const,
+        min: extent.min,
+        max: extent.max,
         grid: {
           color: `color-mix(in oklch, ${colors.border} 65%, transparent)`,
         },
@@ -198,7 +196,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
           maxRotation: 0,
           autoSkip: true,
           maxTicksLimit: 8,
-          callback: (value: string | number) => formatTimeAxisLabel(Number(value), spanMs),
+          callback: (value: string | number) => formatTimeAxisLabel(Number(value), extent.spanMs),
         },
       },
       dbm: {
@@ -230,7 +228,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
         },
       },
     },
-  }), [colors, spanMs]);
+  }), [colors, extent]);
 
   return (
     <div className="flex h-full flex-col gap-2">

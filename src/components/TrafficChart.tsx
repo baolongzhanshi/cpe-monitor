@@ -22,7 +22,7 @@ import {
   buildLegendOptions,
   CHART_DEFAULTS,
 } from '@/lib/chart-theme';
-import { formatTimeAxisLabel } from '@/lib/chart-time-axis';
+import { formatTimeAxisLabel, getTimeAxisExtent } from '@/lib/chart-time-axis';
 
 ChartJS.register(
   CategoryScale,
@@ -60,12 +60,8 @@ export function TrafficChart({ data }: TrafficChartProps) {
   const toMegabitsPerSecond = (bitsPerSecond: number | null | undefined) =>
     Number(((bitsPerSecond || 0) / 1_000_000).toFixed(3));
 
-  // 图表跨度决定刻度与提示的时间格式。
-  const spanMs = useMemo(() => {
-    const first = parseTimestampMs(data[0]?.timestamp);
-    const last = parseTimestampMs(data[data.length - 1]?.timestamp);
-    return first !== null && last !== null ? last - first : 0;
-  }, [data]);
+  // 数据实际时间范围：既决定刻度格式，也用来收掉横轴两侧的空白。
+  const extent = useMemo(() => getTimeAxisExtent(data), [data]);
 
   const chartData = useMemo(
     () => {
@@ -125,7 +121,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
           ...buildTooltipOptions(themeColors),
           callbacks: {
             title: (items: { parsed: { x: number | null } }[]) => (
-              items.length && items[0].parsed.x !== null ? formatTimeAxisLabel(items[0].parsed.x, spanMs) : ''
+              items.length && items[0].parsed.x !== null ? formatTimeAxisLabel(items[0].parsed.x, extent.spanMs) : ''
             ),
             label: (context: { dataset: { label?: string }; parsed: { y: number | null } }) => {
               return `${context.dataset.label || ''}: ${context.parsed.y ?? 0} Mbps`;
@@ -160,13 +156,15 @@ export function TrafficChart({ data }: TrafficChartProps) {
       scales: {
         x: {
           type: 'linear' as const,
+          min: extent.min,
+          max: extent.max,
           grid: {
             color: `color-mix(in oklch, ${themeColors.border} 70%, transparent)`,
           },
           ticks: {
             color: themeColors.muted,
             maxRotation: 0,
-            callback: (value: string | number) => formatTimeAxisLabel(Number(value), spanMs),
+            callback: (value: string | number) => formatTimeAxisLabel(Number(value), extent.spanMs),
           },
         },
         y: {
@@ -183,7 +181,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
         },
       },
     }),
-    [themeColors, data, spanMs],
+    [themeColors, data, extent],
   );
 
   return <Line data={chartData} options={options} />;
