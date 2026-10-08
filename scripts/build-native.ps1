@@ -93,6 +93,15 @@ if ($bootstrapSignature.Status -ne 'Valid' -or $bootstrapSignature.SignerCertifi
 New-Item -ItemType Directory -Path (Join-Path $payloadDir 'support') -Force | Out-Null
 Copy-Item -LiteralPath $webViewBootstrap -Destination (Join-Path $payloadDir 'support\MicrosoftEdgeWebview2Setup.exe') -Force
 
+if ($env:CPE_MONITOR_CANARY -eq '1') {
+    # 灰度构建：只在载荷里多放一个标记文件，后端据此决定是否启动资源采样。
+    # 正式版不带这个标记，采样逻辑保持休眠。
+    $canaryFlag = Join-Path $payloadDir 'resources\server\canary.flag'
+    Set-Content -LiteralPath $canaryFlag -Value "CPE Monitor canary build $version`nBuilt: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')" -Encoding UTF8
+    $installerPath = Join-Path $installerDir "CPEMonitor_${version}_canary_x64-setup.exe"
+    Write-Output "灰度构建：已写入 canary.flag，安装包名 $installerPath"
+}
+
 if ($SkipInstaller) {
     Write-Output "原生运行目录已生成：$payloadDir；按要求跳过 NSIS 安装器生成。"
     return

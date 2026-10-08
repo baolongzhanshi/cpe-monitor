@@ -11,6 +11,7 @@ internal sealed class NativeApplicationContext : ApplicationContext
     private readonly NotifyIcon tray;
     private readonly Thread receiver;
     private readonly System.Windows.Forms.Timer smsWatcher;
+    private ProcessTreeSampler? sampler;
     private int? lastSmsUnread;
     private Form? window;
     private bool ready;
@@ -58,6 +59,8 @@ internal sealed class NativeApplicationContext : ApplicationContext
         smsWatcher = new System.Windows.Forms.Timer { Interval = 10_000 };
         smsWatcher.Tick += async (_, _) => await CheckNewSmsAsync();
         smsWatcher.Start();
+        // 灰度版才创建采样器；正式版没有 canary.flag，这里不会执行。
+        if (ProcessTreeSampler.CanaryEnabled) { sampler = new ProcessTreeSampler(api, () => ready); sampler.Start(); }
         var startup = new System.Windows.Forms.Timer { Interval = 1 };
         startup.Tick += async (_, _) =>
         {
@@ -152,7 +155,7 @@ internal sealed class NativeApplicationContext : ApplicationContext
             window?.Dispose(); tray.Visible = false;
             var menu = tray.ContextMenuStrip;
             var icon = tray.Icon;
-            smsWatcher.Dispose(); tray.Dispose(); menu?.Dispose(); icon?.Dispose(); dispatcher.Dispose(); api.Dispose(); host.Dispose(); lifetime.Dispose(); showEvent.Dispose(); exitEvent.Dispose();
+            sampler?.Dispose(); smsWatcher.Dispose(); tray.Dispose(); menu?.Dispose(); icon?.Dispose(); dispatcher.Dispose(); api.Dispose(); host.Dispose(); lifetime.Dispose(); showEvent.Dispose(); exitEvent.Dispose();
         }
         base.Dispose(disposing);
     }

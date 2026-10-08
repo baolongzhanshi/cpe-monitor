@@ -410,6 +410,29 @@ const migrations: Array<{ version: number; migrate: Migration }> = [
       `);
     },
   },
+  {
+    version: 8,
+    migrate(database) {
+      // 资源样本表：只由灰度版宿主写入，正式版不会产生任何数据。
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS resource_samples (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sampled_at TEXT NOT NULL,
+          source TEXT NOT NULL DEFAULT 'desktop-host',
+          process_count INTEGER,
+          working_set_bytes INTEGER,
+          private_bytes INTEGER,
+          cpu_percent REAL,
+          handles INTEGER,
+          threads INTEGER,
+          uptime_seconds REAL,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_resource_samples_time
+        ON resource_samples (sampled_at);
+      `);
+    },
+  },
 ];
 
 function readSchemaVersion(database: SqliteDatabase): number {

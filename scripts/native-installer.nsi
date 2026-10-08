@@ -143,6 +143,8 @@ Section "CPE Monitor" SEC_MAIN
     Abort
   install_directory_ready:
   SetOutPath "$INSTDIR"
+  ; 正式版安装时清掉可能残留的灰度标记，避免从灰度版回退后仍处于灰度状态。
+  Delete "$INSTDIR\resources\server\canary.flag"
   ClearErrors
   File /r "${INPUT_DIR}\*"
   ${If} ${Errors}
