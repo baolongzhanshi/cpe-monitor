@@ -59,20 +59,22 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   }, [query]);
 
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setActiveIndex(0);
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
+    if (!open) return;
+    // 打开时重置并聚焦。延后一拍避免 effect 内同步 setState，返回时清理全部定时器。
+    const resetTimer = window.setTimeout(() => { setQuery(''); setActiveIndex(0); }, 0);
+    const focusTimer = window.setTimeout(() => inputRef.current?.focus(), 50);
+    return () => { window.clearTimeout(resetTimer); window.clearTimeout(focusTimer); };
   }, [open]);
-
-  useEffect(() => {
-    setActiveIndex(0);
-  }, [query]);
 
   const navigate = (href: string) => {
     router.push(href);
     onOpenChange(false);
+  };
+
+  // 查询变化时回到第一项，直接在事件里重置，不需要额外 effect。
+  const handleQueryChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
+    setActiveIndex(0);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -99,7 +101,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
           <Input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={handleQueryChange}
             onKeyDown={handleKeyDown}
             placeholder="搜索页面…"
             className="h-8 border-0 p-0 shadow-none focus-visible:ring-0"

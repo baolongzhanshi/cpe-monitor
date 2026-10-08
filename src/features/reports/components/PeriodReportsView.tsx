@@ -46,7 +46,9 @@ export function PeriodReportsView({ type }: PeriodReportsViewProps) {
   }, [type]);
 
   useEffect(() => {
-    void fetchReports();
+    // 延后一拍触发，避免在 effect 内同步 setState（React 19 的 lint 规则）。
+    const timer = window.setTimeout(() => { void fetchReports(); }, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchReports]);
 
   const Icon = type === 'weekly' ? CalendarDays : CalendarRange;

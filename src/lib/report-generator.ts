@@ -4,7 +4,6 @@ import {
   getAppDayRange,
   getAppHour,
   toSqliteTimestamp,
-  APP_TIME_ZONE,
 } from './date-time';
 import { computeCounterDelta } from './traffic-units';
 

@@ -49,7 +49,9 @@ export function useAlertHistory() {
   }, []);
 
   useEffect(() => {
-    void fetchLogs(page, notifiedFilter);
+    // 延后一拍触发，避免在 effect 内同步 setState（React 19 的 lint 规则）。
+    const timer = window.setTimeout(() => { void fetchLogs(page, notifiedFilter); }, 0);
+    return () => window.clearTimeout(timer);
   }, [page, notifiedFilter, fetchLogs]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));

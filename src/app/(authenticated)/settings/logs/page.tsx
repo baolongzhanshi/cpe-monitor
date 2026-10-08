@@ -59,7 +59,9 @@ export default function SystemLogsPage() {
   }, []);
 
   useEffect(() => {
-    void fetchLogs(page, level);
+    // 延后一拍触发，避免在 effect 内同步 setState（React 19 的 lint 规则）。
+    const timer = window.setTimeout(() => { void fetchLogs(page, level); }, 0);
+    return () => window.clearTimeout(timer);
   }, [page, level, fetchLogs]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
