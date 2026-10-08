@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { GitCompareArrows } from 'lucide-react';
 import {
@@ -97,6 +97,14 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
     setDataB(b);
     setLoading(false);
   }, [rangeA, rangeB, fetchRange]);
+
+  // 打开卡片就自动对比一次，改选择立即重算。
+  // 默认已经是 A=今天、B=昨天，所以用户不需要先找到“对比”按钮才有曲线。
+  useEffect(() => {
+    // 延迟到下一个事件循环再触发，避免在 effect 内同步 setState（React 19 的 lint 规则）。
+    const timer = window.setTimeout(() => { void handleCompare(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [handleCompare]);
 
   const chartData = useMemo(() => {
     if (!dataA && !dataB) return null;
@@ -210,7 +218,7 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
             <Line data={chartData} options={options} />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-               选择两个时间范围后点击“对比”查看叠加曲线
+               已自动对比所选范围，修改选择会立即重算
             </div>
           )}
         </div>
