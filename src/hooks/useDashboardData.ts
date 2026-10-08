@@ -46,6 +46,15 @@ export function useDashboardData() {
 
   const { schedulerSaving, updateScheduler } = useSchedulerControl(overview, setOverview);
 
+  // 稳定的回调引用，便于下游卡片用 memo 跳过与实时指标无关的重渲染。
+  const toggleScheduler = useCallback((enabled: boolean) => {
+    void updateScheduler(enabled);
+  }, [updateScheduler]);
+
+  const changeSchedulerInterval = useCallback((interval: number) => {
+    void updateScheduler(Boolean(overview?.schedulerStatus?.enabled), interval);
+  }, [updateScheduler, overview?.schedulerStatus?.enabled]);
+
   const [unit, setUnit] = useState<'MB' | 'GB'>('GB');
   const [refreshing, setRefreshing] = useState(false);
   const [collecting, setCollecting] = useState(false);
@@ -92,10 +101,17 @@ export function useDashboardData() {
   const rate = trafficStats || {};
   const isConnected = overview?.connectionStatus === '901';
   const updateLabel = getUpdateStateLabel(overview?.updateState);
-  const cell = overview?.networkSnapshot || deviceSnapshot?.cellInformation || {};
-  const deviceName = getSnapshotValue(
-    deviceSnapshot?.deviceInformation,
-    ['DeviceName', 'spreadname_zh', 'spreadname_en'],
+  const networkSnapshot = overview?.networkSnapshot;
+  const cellInformation = deviceSnapshot?.cellInformation;
+  // 小区信息每几分钟才变，缓存后引用不会跟着每秒的速率更新一起变化。
+  const cell = useMemo(
+    () => networkSnapshot ?? cellInformation ?? {},
+    [networkSnapshot, cellInformation],
+  );
+  const deviceInformation = deviceSnapshot?.deviceInformation;
+  const deviceName = useMemo(
+    () => getSnapshotValue(deviceInformation, ['DeviceName', 'spreadname_zh', 'spreadname_en']),
+    [deviceInformation],
   );
   const smsSyncLabel = smsSync?.enabled ? `每 ${formatSyncInterval(smsSync.interval)}` : '已暂停';
   const smsSyncDetail = smsSync?.lastError
@@ -147,6 +163,8 @@ export function useDashboardData() {
     schedulerStatusLabel,
     refreshDashboard,
     updateScheduler,
+    toggleScheduler,
+    changeSchedulerInterval,
     collecting,
     collectNow,
     sseStatus,

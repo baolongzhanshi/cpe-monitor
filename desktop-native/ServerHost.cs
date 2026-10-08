@@ -8,6 +8,7 @@ namespace CpeMonitor.Native;
 internal sealed class ServerHost : IDisposable
 {
     private Process? server;
+    private ProcessJob? job;
     private readonly CancellationTokenSource stopping = new();
     private bool disposed;
     internal static int Port => int.TryParse(Environment.GetEnvironmentVariable("CPE_MONITOR_PORT"), out var value) && value is > 1024 and <= 65535 ? value : 3210;
@@ -19,6 +20,10 @@ internal sealed class ServerHost : IDisposable
         if (isolatedTest && (Port == 3210 || string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("CPE_MONITOR_DATA_DIR")) ||
             (Directory.Exists(DataDirectory) && Directory.EnumerateFileSystemEntries(DataDirectory).Any())))
             throw new InvalidOperationException("验收必须使用独立端口和全新的空数据目录。");
+        var nodePath = Path.Combine(AppContext.BaseDirectory, "runtime", "node.exe");
+        var serverPath = Path.Combine(AppContext.BaseDirectory, "resources", "server", "server.js");
+        if (!File.Exists(nodePath) || !File.Exists(serverPath)) throw new InvalidOperationException("内置后台文件不完整，请重新安装 CPE Monitor。");
+        RemoveOrphanedBackend(nodePath);
         using (var probe = new TcpClient())
         {
             try
@@ -28,9 +33,6 @@ internal sealed class ServerHost : IDisposable
             }
             catch (SocketException) { }
         }
-        var nodePath = Path.Combine(AppContext.BaseDirectory, "runtime", "node.exe");
-        var serverPath = Path.Combine(AppContext.BaseDirectory, "resources", "server", "server.js");
-        if (!File.Exists(nodePath) || !File.Exists(serverPath)) throw new InvalidOperationException("内置后台文件不完整，请重新安装 CPE Monitor。");
         Directory.CreateDirectory(DataDirectory);
         var secretPath = Path.Combine(DataDirectory, "runtime-secrets.json");
         var protectedPath = Path.Combine(DataDirectory, "runtime-secrets.dpapi");
@@ -92,6 +94,9 @@ internal sealed class ServerHost : IDisposable
         start.Environment["CPE_CONFIG_SECRET"] = secrets["cpe_config_secret"];
         start.Environment["CPE_SESSION_SECRET"] = secrets["cpe_session_secret"];
         server = Process.Start(start) ?? throw new InvalidOperationException("无法启动本机后台。");
+        // 绑定到作业对象：宿主消失时由系统回收后台，覆盖崩溃和被强制结束的情况。
+        job = ProcessJob.TryCreate();
+        job?.TryAssign(server);
         _ = DrainErrorAsync(server.StandardError, stopping.Token);
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(ct);
         startup.CancelAfter(TimeSpan.FromSeconds(60));
@@ -108,6 +113,49 @@ internal sealed class ServerHost : IDisposable
         }
         throw new InvalidOperationException("本机后台启动超时。");
     }
+
+    /// <summary>
+    /// 清理无人管理的遗留后台进程。宿主崩溃或被强制结束时会绕过 Dispose，
+    /// 遗留的后台进程会占住端口和数据库，导致下次启动失败。
+    /// 仅当没有其他存活宿主时才清理，且只结束本安装目录下的 node 进程。
+    /// </summary>
+    private static void RemoveOrphanedBackend(string nodePath)
+    {
+        var target = Path.GetFullPath(nodePath);
+        var ownName = Process.GetCurrentProcess().ProcessName;
+        var liveHosts = Process.GetProcessesByName(ownName).Where(process => process.Id != Environment.ProcessId).ToArray();
+        if (liveHosts.Length > 0)
+        {
+            foreach (var host in liveHosts) host.Dispose();
+            return;
+        }
+        foreach (var process in Process.GetProcessesByName("node"))
+        {
+            try
+            {
+                if (!string.Equals(process.MainModule?.FileName, target, StringComparison.OrdinalIgnoreCase)) continue;
+                AppendHostEvent($"清理无人管理的遗留后台进程，PID {process.Id}");
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit(5000);
+            }
+            catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
+            finally { process.Dispose(); }
+        }
+    }
+
+    private static void AppendHostEvent(string message)
+    {
+        try
+        {
+            Directory.CreateDirectory(DataDirectory);
+            File.AppendAllText(
+                Path.Combine(DataDirectory, "host-events.log"),
+                $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz} {message}{Environment.NewLine}");
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
+
     private static async Task DrainErrorAsync(StreamReader reader, CancellationToken ct)
     {
         try
@@ -134,6 +182,7 @@ internal sealed class ServerHost : IDisposable
             catch (InvalidOperationException) { }
             finally { server.Dispose(); server = null; }
         }
+        job?.Dispose(); job = null;
         stopping.Dispose();
     }
 }

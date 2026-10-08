@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatLocalTime } from '@/lib/format';
-import { isLiveSampleFresh } from '@/lib/live-view-model';
+import { LIVE_STALE_AFTER_MS, isLiveSampleFresh } from '@/lib/live-view-model';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 interface RefreshIndicatorProps {
@@ -26,11 +26,14 @@ export function RefreshIndicator({
   const pageVisible = usePageVisibility();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!pageVisible) return;
-    // 只更新本地时效标记，不额外向设备或后台发请求。
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, [pageVisible]);
+    if (!pageVisible || !lastRefreshAt) return;
+    // 只在数据即将失效的边界刷新一次，避免常驻每秒重渲染。
+    // 正常情况下父组件会随新数据更新，这个定时器只在断流时兜底。
+    const age = Date.now() - lastRefreshAt.getTime();
+    const delay = Math.max(250, LIVE_STALE_AFTER_MS - age + 100);
+    const timer = window.setTimeout(() => setNow(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [pageVisible, lastRefreshAt, now]);
   const fresh = isLiveSampleFresh(lastRefreshAt, lastRefreshStale, now);
 
   return (

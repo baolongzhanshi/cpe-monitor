@@ -56,6 +56,11 @@ internal static class ModernUiSmokeTest
                 if (!text.Contains("CPE Monitor", StringComparison.Ordinal) && !text.Contains("CPE", StringComparison.Ordinal))
                     throw new InvalidOperationException("现代页面未渲染产品内容");
                 report["pageRendered"] = true;
+                // 失败诊断：记录页面实际文本与可见性来源，便于区分“页面未运行”和“被判定为不可见”。
+                report["bodyTextSample"] = text.Length > 1200 ? text[..1200] : text;
+                report["documentVisibility"] = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("document.visibilityState")) ?? "";
+                report["hostVisibleFlag"] = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("String(window.__CPE_MONITOR_VISIBLE__)")) ?? "";
+                report["fixtureStreams"] = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("String(window.__fixtureStreams)")) ?? "";
                 var firstRates = string.Join("|", Regex.Matches(text, @"\d+(?:\.\d+)?\s*Mbps").Select(match => match.Value));
                 await Task.Delay(2_500);
                 var secondText = JsonSerializer.Deserialize<string>(await browser.ExecuteScriptAsync("document.body.innerText")) ?? "";

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Clock3, ShieldCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -12,7 +13,7 @@ interface SchedulerCardProps {
   onIntervalChange: (interval: number) => void;
 }
 
-export default function SchedulerCard({
+function SchedulerCard({
   enabled,
   interval,
   running,
@@ -65,3 +66,5 @@ export default function SchedulerCard({
     </Card>
   );
 }
+
+export default memo(SchedulerCard);

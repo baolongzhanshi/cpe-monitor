@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Activity, DatabaseZap, RefreshCw, Wifi } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import StatusPill from '@/components/dashboard/StatusPill';
@@ -12,7 +13,7 @@ interface StatusPillsRowProps {
   collectionHealthStatus: 'healthy' | 'failed' | 'stale' | 'never' | 'disabled';
 }
 
-export default function StatusPillsRow({
+function StatusPillsRow({
   isConnected,
   updateLabel,
   updateState,
@@ -60,3 +61,5 @@ export default function StatusPillsRow({
     </Card>
   );
 }
+
+export default memo(StatusPillsRow);

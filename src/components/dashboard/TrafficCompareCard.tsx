@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { GitCompareArrows } from 'lucide-react';
 import {
@@ -62,7 +62,7 @@ function getDateRange(range: string): { start: string; end: string } {
   }
 }
 
-export default function TrafficCompareCard({ className }: TrafficCompareCardProps) {
+function TrafficCompareCard({ className }: TrafficCompareCardProps) {
   const themeColors = useChartTheme();
   const [rangeA, setRangeA] = useState('today');
   const [rangeB, setRangeB] = useState('yesterday');
@@ -210,7 +210,7 @@ export default function TrafficCompareCard({ className }: TrafficCompareCardProp
             <Line data={chartData} options={options} />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-              选择两个时间范围后点击"对比"查看叠加曲线
+               选择两个时间范围后点击“对比”查看叠加曲线
             </div>
           )}
         </div>
@@ -218,3 +218,5 @@ export default function TrafficCompareCard({ className }: TrafficCompareCardProp
     </Card>
   );
 }
+
+export default memo(TrafficCompareCard);

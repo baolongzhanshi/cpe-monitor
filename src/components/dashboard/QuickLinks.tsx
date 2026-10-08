@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Bell, Settings, Smartphone } from 'lucide-react';
@@ -53,7 +53,7 @@ function QuickLink({
   );
 }
 
-export default function QuickLinks() {
+function QuickLinks() {
   return (
     <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
       <QuickLink index={0} href="/device" icon={<Smartphone className="h-5 w-5" />} label="设备详情" description="查看设备信息、在线设备" />
@@ -62,3 +62,5 @@ export default function QuickLinks() {
     </div>
   );
 }
+
+export default memo(QuickLinks);

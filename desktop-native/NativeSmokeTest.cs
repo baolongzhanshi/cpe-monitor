@@ -20,7 +20,7 @@ internal static class NativeSmokeTest
                 if (!JsonValues.Bool(auth, "desktopMode") || JsonValues.Text(health, "status") != "ok" || !setup.TryGetProperty("completed", out _)) throw new InvalidOperationException("后台免密码验收失败。");
             }).GetAwaiter().GetResult();
             using var form = new ModernMainForm(); form.CreateControl();
-            File.WriteAllText(reportPath, JsonSerializer.Serialize(new { success = true, version = "0.3.0", nativeUi = true, embeddedWebUi = true, desktopMode = true, isolatedData = true })); return 0;
+            File.WriteAllText(reportPath, JsonSerializer.Serialize(new { success = true, version = "0.3.2", nativeUi = true, embeddedWebUi = true, desktopMode = true, isolatedData = true })); return 0;
         }
         catch (Exception error) { File.WriteAllText(reportPath, JsonSerializer.Serialize(new { success = false, error = error.Message })); return 1; }
     }

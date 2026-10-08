@@ -20,6 +20,7 @@ internal sealed class ModernMainForm : Form
     private bool _disposed;
     private bool _suspended;
     private bool _updatingVisibility;
+    private bool _visibilityPending;
     private readonly Func<CoreWebView2, Task>? _configureBrowser;
     internal Microsoft.Web.WebView2.Core.CoreWebView2? Browser => _webView.CoreWebView2;
     internal bool Ready => _initialized;
@@ -88,7 +89,7 @@ internal sealed class ModernMainForm : Form
             if (_configureBrowser is not null) await _configureBrowser(core);
             if (_disposed) return;
             core.NavigationCompleted += async (_, _) => await UpdateVisibilityAsync();
-            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.0");
+            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.2");
             _initialized = true;
             _loading.Visible = false;
             _webView.Visible = true;
@@ -108,20 +109,37 @@ internal sealed class ModernMainForm : Form
 
     private async Task UpdateVisibilityAsync()
     {
-        if (!_initialized || _disposed || _updatingVisibility) return;
+        if (!_initialized || _disposed) return;
+        // 更新期间到达的新请求不丢弃，标记后由当前循环重新应用一次。
+        // 丢弃会导致快速最小化/恢复时状态停留在旧值，页面会误以为仍不可见而暂停刷新。
+        if (_updatingVisibility) { _visibilityPending = true; return; }
         _updatingVisibility = true;
         try
         {
-            var visible = Visible && WindowState != FormWindowState.Minimized;
-            if (visible && _suspended) { _webView.CoreWebView2.Resume(); _suspended = false; }
-            _webView.Visible = true;
-            await _webView.CoreWebView2.ExecuteScriptAsync($"window.__CPE_MONITOR_VISIBLE__ = {visible.ToString().ToLowerInvariant()}; window.dispatchEvent(new CustomEvent('cpe-monitor-visibility', {{ detail: {{ visible: window.__CPE_MONITOR_VISIBLE__ }} }}));");
-            if (_disposed) return;
-            if (!visible)
+            do
             {
-                _webView.Visible = false;
-                _suspended = await _webView.CoreWebView2.TrySuspendAsync();
+                _visibilityPending = false;
+                var visible = Visible && WindowState != FormWindowState.Minimized;
+                if (visible)
+                {
+                    // 恢复可见时把内存目标还原为正常，并结束渲染进程挂起。
+                    _webView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Normal;
+                    if (_suspended) { _webView.CoreWebView2.Resume(); _suspended = false; }
+                }
+                _webView.Visible = true;
+                await _webView.CoreWebView2.ExecuteScriptAsync($"window.__CPE_MONITOR_VISIBLE__ = {visible.ToString().ToLowerInvariant()}; window.dispatchEvent(new CustomEvent('cpe-monitor-visibility', {{ detail: {{ visible: window.__CPE_MONITOR_VISIBLE__ }} }}));");
+                if (_disposed) return;
+                if (!visible)
+                {
+                    // 不可见时先降低内存目标（引擎会丢弃缓存并把内存换出），再挂起渲染进程。
+                    // 两项都是尽力而为，失败不应影响窗口隐藏。
+                    try { _webView.CoreWebView2.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low; }
+                    catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException or System.Runtime.InteropServices.COMException) { }
+                    _webView.Visible = false;
+                    _suspended = await _webView.CoreWebView2.TrySuspendAsync();
+                }
             }
+            while (_visibilityPending && !_disposed);
         }
         catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException or System.Runtime.InteropServices.COMException) { }
         finally { _updatingVisibility = false; }
@@ -132,6 +150,17 @@ internal sealed class ModernMainForm : Form
         if (disposing && !_disposed)
         {
             _disposed = true;
+            try
+            {
+                // 关闭窗口时主动停止页面并释放浏览器进程，避免渲染/GPU 进程继续驻留。
+                var core = _webView.CoreWebView2;
+                if (core is not null)
+                {
+                    core.MemoryUsageTargetLevel = CoreWebView2MemoryUsageTargetLevel.Low;
+                    core.Stop();
+                }
+            }
+            catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException or System.Runtime.InteropServices.COMException) { }
             _webView.Dispose();
             _loading.Dispose();
         }

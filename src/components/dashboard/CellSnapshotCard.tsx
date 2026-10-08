@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Radio } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,7 +21,7 @@ interface CellSnapshotCardProps {
   };
 }
 
-export default function CellSnapshotCard({
+function CellSnapshotCard({
   networkType,
   connectionStatus,
   deviceName,
@@ -61,3 +62,5 @@ export default function CellSnapshotCard({
     </Card>
   );
 }
+
+export default memo(CellSnapshotCard);

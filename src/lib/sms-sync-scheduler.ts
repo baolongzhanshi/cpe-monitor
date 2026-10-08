@@ -7,10 +7,13 @@
 import crypto from 'crypto';
 import { db, initializeDatabase } from './db';
 import { getOrCreateCpeClient } from './cpe-client';
-import { sendSmsNotification } from './notifiers/email';
-import { sendSmsWechat } from './notifiers/wechat';
-import { sendPushplusSms } from './notifiers/pushplus';
-import { getSettingsMap, isCpeConfigured, readNotificationConfig, setSetting } from './settings-store';
+import { getSettingsMap, isCpeConfigured, setSetting } from './settings-store';
+import {
+  drainNotificationOutbox,
+  enqueueSmsNotifications,
+  startNotificationOutboxWorker,
+  stopNotificationOutboxWorker,
+} from './notification-outbox';
 import { createIntervalScheduler, type SyncStatus } from './interval-scheduler';
 import { hasStoredSmsChanged, type ExistingSmsRecord } from './sms-sync-utils';
 import { SMS_SYNC_INTERVAL } from './sync-interval';
@@ -69,9 +72,12 @@ export async function restartSmsScheduler(): Promise<SmsSyncStatus> {
 export function stopSmsScheduler(): void {
   scheduler.stop();
   lightweightSync.reset();
+  stopNotificationOutboxWorker();
 }
 
 export async function ensureSmsSchedulerStarted(): Promise<void> {
+  // 出站队列与短信同步节奏解耦：即使用户把同步间隔调大，失败通知仍按退避节奏重试。
+  startNotificationOutboxWorker();
   return scheduler.ensureStarted();
 }
 
@@ -93,9 +99,6 @@ async function persistSmsMessages(messages: CpeSmsMessage[]): Promise<SmsSyncRes
 
   const settings = getSettingsMap();
   const firstSync = settings.sms_initial_sync_completed !== 'true' && existingCount === 0;
-  const emailConfig = readNotificationConfig('email');
-  const wechatConfig = readNotificationConfig('wechat');
-  const pushplusConfig = readNotificationConfig('pushplus');
   let inserted = 0;
   let updated = 0;
   let notificationsSent = 0;
@@ -130,20 +133,10 @@ async function persistSmsMessages(messages: CpeSmsMessage[]): Promise<SmsSyncRes
       continue;
     }
 
-    let notified = firstSync ? 1 : 0;
+    // 新入站短信只写入出站队列，由队列负责投递与重试；首次导入的旧短信不推送。
+    const notified = 0;
     if (!firstSync && sms.direction === 'inbound') {
-      let sent = false;
-      if (emailConfig?.to && (Array.isArray(emailConfig.to) ? emailConfig.to.length > 0 : Boolean(emailConfig.to))) {
-        sent = await sendSmsNotification(emailConfig, sms) || sent;
-      }
-      if (wechatConfig?.webhookUrl) {
-        sent = await sendSmsWechat(wechatConfig, sms) || sent;
-      }
-      if (pushplusConfig?.token) {
-        sent = await sendPushplusSms(pushplusConfig, sms) || sent;
-      }
-      notified = sent ? 1 : 0;
-      if (sent) notificationsSent += 1;
+      enqueueSmsNotifications(sms, fingerprint);
     }
 
     db.prepare(`
@@ -163,6 +156,10 @@ async function persistSmsMessages(messages: CpeSmsMessage[]): Promise<SmsSyncRes
     );
     inserted += 1;
   }
+
+  // 立即尝试投递一次，未成功的记录留在队列里按退避重试。
+  const drained = await drainNotificationOutbox();
+  notificationsSent = drained.sent;
 
   const syncedAt = new Date().toISOString();
   setSetting('sms_initial_sync_completed', 'true');

@@ -1,14 +1,12 @@
-# 0.3.0 交付状态
+# 0.3.2 交付状态
 
 更新日期：2026-10-08（北京时间）。
 
-- 本地0.3.0安装包已生成，桌面文件SHA256：`77D2D9F945CCC06FA2D4537E3F63B4D44085AFBB59B393FA6B039D68B16190D8`。
-- 最终现代UI与隔离安装验收通过；实际设备、PushPlus送达和长期资源测试尚未由本轮完成。
-- 完整改版前/发布备份已保留，详见 `AI_HANDOFF.md`。
-- GitHub目标：`baolongzhanshi/cpe-monitor`；本轮已通过本机Git已有凭据成功推送，插件403不再阻塞交付。
-- 源码提交：`9a166eb6dd5be8ead703afe8d3b6c7c64ed9b7a6`，94个安全源码/文档文件；`main`与`codex/modern-ui-realtime-0.3.0`已核对到同一源码提交。
-- [源码提交](https://github.com/baolongzhanshi/cpe-monitor/commit/9a166eb6dd5be8ead703afe8d3b6c7c64ed9b7a6)。后续仅文档记录提交不改变应用源码及桌面安装包。
-- [Windows构建 #15](https://github.com/baolongzhanshi/cpe-monitor/actions/runs/37727659267)已确认 **Success**，耗时4分53秒，产生`CPEMonitor-Windows-installer` artifact（约67MB）。该工作流不会自动创建Release。
-- CI只有一条非致命提示：v4系列GitHub Actions使用的Node20运行环境正被强制升级到Node24；后续维护可更新Actions版本。这与应用内置Node24.14.0是不同层次。
-- 推送后完整发布备份：`backups/v0.3.0-released-20261008-122936-429`，`manifest.status=complete`，源码377文件，Git历史包含上述源码提交。
-- 用户数据、密钥、`.env`、备份和本地构建产物未上传。
+- 本地0.3.2安装包已生成：桌面 `D:\Desktop\CPEMonitor_0.3.2_x64-setup.exe`，工作区 `installers/CPEMonitor_0.3.2_x64-setup.exe`，SHA256：`40C6CC2256FAE3BD13C04B6955EA3669CBE638FA96BF93BA198D635C3E3060EE`，70,239,121 字节。两处哈希已核对一致。
+- 本轮新增通知出站队列：`notification_outbox` 表（schema v7），短信入库与待发送记录同流程落库，每渠道一行且去重键唯一；失败按 30 秒到 2 小时指数退避，超过 5 次进入 dead；后台每 30 秒处理一次，与短信同步间隔解耦。送达语义为“至少一次”，不承诺精确一次。
+- 验证结果：类型检查通过；改动文件 lint 零问题；单元测试 76 项全部通过；Next 生产构建通过；真实 SQLite 上迁移验证为 `user_version=7` 且表结构与索引齐全；`scripts/test-native.ps1` 隔离后台验收通过；现代 UI 端到端验收 `success=true`，页面渲染、模拟速率每秒变化、最小化挂起、恢复全部通过。
+- 未完成：真实 H153-381 的长期运行、PushPlus 实际送达延迟、长时间 CPU/内存与句柄增长趋势。不把本轮结果当作这些能力的证明。
+- 备份：打包前 `backups/v0.3.1-before-change-20261008-184618-771`；发布后 `backups/v0.3.2-released-20261008-185059-627`，`manifest.status=complete`，源码384文件。
+- 项目笔记已同步到 Notion：https://app.notion.com/p/3f3eb108f5ec8109bd57c260d5f713b3
+- 本轮源码尚未提交到 Git。`origin` 指向原作者仓库，Fork 为 `baolongzhanshi/cpe-monitor`，推送前必须确认目标远程，禁止误推 `origin`。
+- 用户数据、密钥、`.env`、备份与本地构建产物未上传。

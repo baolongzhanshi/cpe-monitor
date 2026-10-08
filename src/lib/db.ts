@@ -386,6 +386,30 @@ const migrations: Array<{ version: number; migrate: Migration }> = [
       `);
     },
   },
+  {
+    version: 7,
+    migrate(database) {
+      // 通知出站队列：短信入库与“待发送”记录同事务落库，失败可退避重试。
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS notification_outbox (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          kind TEXT NOT NULL DEFAULT 'sms',
+          channel TEXT NOT NULL,
+          dedupe_key TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          attempts INTEGER NOT NULL DEFAULT 0,
+          next_attempt_at TEXT,
+          last_error TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT,
+          UNIQUE (channel, kind, dedupe_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_notification_outbox_due
+        ON notification_outbox (status, next_attempt_at);
+      `);
+    },
+  },
 ];
 
 function readSchemaVersion(database: SqliteDatabase): number {
