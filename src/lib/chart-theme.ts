@@ -52,7 +52,7 @@ export function readChartTheme(): ChartThemeColors {
 /**
  * Reactive chart theme hook — re-reads CSS variables when:
  * 1. Dark/light mode changes (next-themes resolvedTheme)
- * 2. Custom brand hue changes (localStorage cpeye-theme-hue)
+ * 2. 自定义主题色变化（localStorage cpe-monitor-theme-hue）
  */
 export function useChartTheme(): ChartThemeColors {
   const { resolvedTheme } = useTheme();

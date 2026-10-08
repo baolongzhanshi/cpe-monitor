@@ -1,13 +1,9 @@
 import { requireSession, withApiHandler, jsonOk } from '@/lib/api-route';
-import { getOrCreateCpeClient } from '@/lib/cpe-client';
+import { getDashboardTrafficStats } from '@/lib/dashboard-live-service';
+
+export const dynamic = 'force-dynamic';
 
 export const GET = withApiHandler(async () => {
   await requireSession();
-  const client = getOrCreateCpeClient();
-  await client.ensureLogin();
-  const [stats, monthStatistics] = await Promise.all([
-    client.getTrafficStatistics(),
-    client.getMonthStatistics(),
-  ]);
-  return jsonOk({ ...stats, ...monthStatistics });
+  return jsonOk(await getDashboardTrafficStats(), { headers: { 'Cache-Control': 'no-store' } });
 }, '获取流量统计失败');

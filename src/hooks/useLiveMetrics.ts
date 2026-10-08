@@ -2,8 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/client-api';
-import { bytesPerSecondToBitsPerSecond } from '@/lib/traffic-units';
+import {
+  appendLiveHistoryPoint,
+  createLiveHistoryPoint,
+  getLiveSampleTime,
+  isOlderLiveSample,
+  type LiveDashboardViewSnapshot,
+} from '@/lib/live-view-model';
 import { useSSE, type SSEEvent } from './useSSE';
+import { isPageVisible, usePageVisibility } from './usePageVisibility';
 import type {
   DashboardOverviewResponse,
   DataPlanConfig,
@@ -26,11 +33,12 @@ export interface DeviceSnapshot {
   };
 }
 
-/** Fallback polling interval when SSE is disconnected. */
-const FALLBACK_POLL_INTERVAL_MS = 15_000;
-const MAX_LIVE_POINTS = 72;
+const LIVE_FALLBACK_POLL_INTERVAL_MS = 2_000;
+const DETAILS_REFRESH_INTERVAL_MS = 5 * 60_000;
+const SMS_STATUS_REFRESH_INTERVAL_MS = 15_000;
 
 export function useLiveMetrics() {
+  const pageVisible = usePageVisibility();
   const [overview, setOverview] = useState<DashboardOverviewResponse | null>(null);
   const [liveMetricHistory, setLiveMetricHistory] = useState<TrafficHistoryPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,172 +49,175 @@ export function useLiveMetrics() {
   const [deviceSnapshot, setDeviceSnapshot] = useState<DeviceSnapshot | null>(null);
   const [smsSync, setSmsSync] = useState<SmsSyncStatusView | null>(null);
   const [lastRefreshAt, setLastRefreshAt] = useState<Date | null>(null);
+  const [lastRefreshStale, setLastRefreshStale] = useState(true);
+  const lastSampleTimeRef = useRef<number | null>(null);
+  const livePendingRef = useRef<Promise<void> | null>(null);
+  const detailsPendingRef = useRef<Promise<void> | null>(null);
+  const smsPendingRef = useRef<Promise<void> | null>(null);
+  const liveAbortRef = useRef<AbortController | null>(null);
+  const detailsAbortRef = useRef<AbortController | null>(null);
+  const smsAbortRef = useRef<AbortController | null>(null);
+  const lastDetailsAttemptRef = useRef(0);
+  const lastSmsAttemptRef = useRef(0);
 
-  const fetchOverview = useCallback(async (): Promise<DashboardOverviewResponse | null> => {
-    try {
-      const data = await apiFetch<DashboardOverviewResponse>(
-        '/api/dashboard/overview',
-        undefined,
-        '获取概览失败',
-      );
-      setOverview(data);
-      setOverviewError(data.cpeError || '');
-      setLastRefreshAt(new Date());
-      return data;
-    } catch (error) {
-      console.error(error);
-      setOverviewError(
-        error instanceof Error ? error.message : '无法获取实时状态，正在显示兜底数据',
-      );
-      return null;
-    } finally {
-      setLoading(false);
+  const applyLiveResponse = useCallback((data: LiveDashboardViewSnapshot) => {
+    if (!isPageVisible()) return;
+    const collectedAt = getLiveSampleTime(data);
+    if (isOlderLiveSample(collectedAt, lastSampleTimeRef.current)) return;
+    if (collectedAt || lastSampleTimeRef.current === null) {
+      setOverview(data.overview);
+      setTrafficStats(data.trafficStats);
     }
-  }, []);
-
-  const fetchTrafficStats = useCallback(async (): Promise<TrafficStatsResponse | null> => {
-    try {
-      const data = await apiFetch<TrafficStatsResponse>(
-        '/api/dashboard/traffic-stats',
-        undefined,
-        '获取流量统计失败',
-      );
-      setTrafficStats(data);
-      setDataError('');
-      return data;
-    } catch (error) {
-      console.error(error);
-      setDataError(
-        error instanceof Error ? error.message : 'CPE 登录失败，无法获取流量统计。',
-      );
-      return null;
+    setOverviewError(data.overview.cpeError || (data.stale ? '实时数据暂不可用，保留最近一次数据' : ''));
+    setLastRefreshStale(Boolean(data.stale || data.overview.cpeError || !collectedAt));
+    if (collectedAt) {
+      lastSampleTimeRef.current = collectedAt.getTime();
+      setLastRefreshAt(collectedAt);
     }
-  }, []);
-
-  const fetchStartDate = useCallback(async () => {
-    try {
-      const data = await apiFetch<DataPlanConfig>(
-        '/api/dashboard/start-date',
-        undefined,
-        '获取套餐配置失败',
-      );
-      setStartDate(data);
-    } catch (error) {
-      console.error(error);
-      setDataError(
-        error instanceof Error ? error.message : 'CPE 登录失败，无法获取套餐配置。',
-      );
-    }
-  }, []);
-
-  const fetchDeviceSnapshot = useCallback(async () => {
-    try {
-      const data = await apiFetch<DeviceSnapshot>(
-        '/api/dashboard/device',
-        undefined,
-        '获取设备快照失败',
-      );
-      setDeviceSnapshot(data);
-    } catch (error) {
-      console.error(error);
-    }
-  }, []);
-
-  const fetchSmsSyncStatus = useCallback(async () => {
-    try {
-      const data = await apiFetch<SmsSyncStatusView>(
-        '/api/dashboard/sms/settings',
-        undefined,
-        '获取短信同步状态失败',
-      );
-      setSmsSync(data);
-    } catch (error) {
-      console.error(error);
-    }
+    setLiveMetricHistory((current) => appendLiveHistoryPoint(current, createLiveHistoryPoint(data)));
+    setLoading(false);
   }, []);
 
   const fetchLiveMetrics = useCallback(async () => {
-    const [overviewResult, trafficResult] = await Promise.all([
-      fetchOverview(),
-      fetchTrafficStats(),
-    ]);
+    if (!isPageVisible()) return;
+    if (livePendingRef.current) return livePendingRef.current;
+    const controller = new AbortController();
+    liveAbortRef.current = controller;
+    const task = (async () => {
+      try {
+        const data = await apiFetch<LiveDashboardViewSnapshot>(
+          '/api/dashboard/live',
+          { signal: controller.signal },
+          '获取实时状态失败',
+        );
+        if (controller.signal.aborted || !isPageVisible()) return;
+        applyLiveResponse(data);
+      } catch (error) {
+        if (controller.signal.aborted || !isPageVisible()) return;
+        setOverviewError(error instanceof Error ? error.message : '获取实时状态失败');
+        setLastRefreshStale(true);
+      } finally {
+        if (!controller.signal.aborted && isPageVisible()) setLoading(false);
+      }
+    })();
+    livePendingRef.current = task;
+    try {
+      await task;
+    } finally {
+      if (livePendingRef.current === task) livePendingRef.current = null;
+      if (liveAbortRef.current === controller) liveAbortRef.current = null;
+    }
+  }, [applyLiveResponse]);
 
-    if (!overviewResult && !trafficResult) return;
+  const fetchDetails = useCallback(async (force = false) => {
+    if (!isPageVisible()) return;
+    if (detailsPendingRef.current) return detailsPendingRef.current;
+    if (!force && Date.now() - lastDetailsAttemptRef.current < DETAILS_REFRESH_INTERVAL_MS) return;
+    lastDetailsAttemptRef.current = Date.now();
+    const controller = new AbortController();
+    detailsAbortRef.current = controller;
+    const task = (async () => {
+      const [planResult, deviceResult] = await Promise.allSettled([
+        apiFetch<DataPlanConfig>('/api/dashboard/start-date', { signal: controller.signal }, '获取套餐配置失败'),
+        apiFetch<DeviceSnapshot>('/api/dashboard/device', { signal: controller.signal }, '获取设备快照失败'),
+      ]);
+      if (controller.signal.aborted || !isPageVisible()) return;
+      if (planResult.status === 'fulfilled') {
+        setStartDate(planResult.value);
+        setDataError('');
+      } else {
+        setDataError(planResult.reason instanceof Error ? planResult.reason.message : '获取套餐配置失败');
+      }
+      if (deviceResult.status === 'fulfilled') setDeviceSnapshot(deviceResult.value);
+    })();
+    detailsPendingRef.current = task;
+    try {
+      await task;
+    } finally {
+      if (detailsPendingRef.current === task) detailsPendingRef.current = null;
+      if (detailsAbortRef.current === controller) detailsAbortRef.current = null;
+    }
+  }, []);
 
-    const uploadBytesPerSecond = Number.parseFloat(
-      String(trafficResult?.CurrentUploadRate || '0'),
-    );
-    const downloadBytesPerSecond = Number.parseFloat(
-      String(trafficResult?.CurrentDownloadRate || '0'),
-    );
-
-    const point: TrafficHistoryPoint = {
-      timestamp: new Date().toISOString(),
-      uploadBps: bytesPerSecondToBitsPerSecond(uploadBytesPerSecond),
-      downloadBps: bytesPerSecondToBitsPerSecond(downloadBytesPerSecond),
-      connectedDevices: overviewResult?.connectedDevices,
-      signalStrength: overviewResult?.signalStrength,
-      rsrp: overviewResult?.signalStrength,
-      networkType: overviewResult?.networkType || null,
-    };
-
-    setLiveMetricHistory((current) => [...current.slice(-(MAX_LIVE_POINTS - 1)), point]);
-  }, [fetchOverview, fetchTrafficStats]);
+  const fetchSmsSyncStatus = useCallback(async (force = false) => {
+    if (!isPageVisible()) return;
+    if (smsPendingRef.current) return smsPendingRef.current;
+    if (!force && Date.now() - lastSmsAttemptRef.current < SMS_STATUS_REFRESH_INTERVAL_MS) return;
+    lastSmsAttemptRef.current = Date.now();
+    const controller = new AbortController();
+    smsAbortRef.current = controller;
+    const task = (async () => {
+      try {
+        const data = await apiFetch<SmsSyncStatusView>(
+          '/api/dashboard/sms/settings',
+          { signal: controller.signal },
+          '获取短信同步状态失败',
+        );
+        if (!controller.signal.aborted && isPageVisible()) setSmsSync(data);
+      } catch {
+        // 自动读取失败时保留上次状态，下一轮继续读取本机数据库。
+      }
+    })();
+    smsPendingRef.current = task;
+    try {
+      await task;
+    } finally {
+      if (smsPendingRef.current === task) smsPendingRef.current = null;
+      if (smsAbortRef.current === controller) smsAbortRef.current = null;
+    }
+  }, []);
 
   const refreshAll = useCallback(async () => {
-    await Promise.allSettled([
-      fetchLiveMetrics(),
-      fetchStartDate(),
-      fetchDeviceSnapshot(),
-      fetchSmsSyncStatus(),
-    ]);
-  }, [fetchLiveMetrics, fetchStartDate, fetchDeviceSnapshot, fetchSmsSyncStatus]);
+    await Promise.allSettled([fetchLiveMetrics(), fetchDetails(true), fetchSmsSyncStatus(true)]);
+  }, [fetchLiveMetrics, fetchDetails, fetchSmsSyncStatus]);
 
-  // ─── SSE-driven updates with fallback polling ─────────────────────────
   const handleSSEEvent = useCallback((event: SSEEvent) => {
-    if (event.type === 'collection' || event.type === 'metrics') {
-      // New data collected on server — refresh dashboard data
-      void fetchLiveMetrics();
-    }
-  }, [fetchLiveMetrics]);
-
-  const { status: sseStatus } = useSSE({ onEvent: handleSSEEvent });
-  const sseConnected = sseStatus === 'connected';
-  const fallbackTimerRef = useRef<number | null>(null);
-
-  // Initial load
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void refreshAll();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [refreshAll]);
-
-  // Fallback polling only when SSE is not connected
-  useEffect(() => {
-    if (sseConnected) {
-      // SSE active — stop fallback polling
-      if (fallbackTimerRef.current) {
-        window.clearInterval(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
+    if (event.type === 'connection' && event.payload.status === 'error') {
+      setLastRefreshStale(true);
+      setOverviewError(String(event.payload.message || '实时采集连接失败'));
       return;
     }
+    if (event.type !== 'metrics' || !event.payload.overview || !event.payload.trafficStats) return;
+    applyLiveResponse(event.payload as unknown as LiveDashboardViewSnapshot);
+  }, [applyLiveResponse]);
+  const { status: sseStatus } = useSSE({ onEvent: handleSSEEvent, enabled: pageVisible });
 
-    // SSE not connected — start fallback polling
-    if (!fallbackTimerRef.current) {
-      fallbackTimerRef.current = window.setInterval(() => {
-        void fetchLiveMetrics();
-      }, FALLBACK_POLL_INTERVAL_MS);
-    }
-
+  useEffect(() => {
+    if (!pageVisible) return;
+    void fetchDetails();
+    void fetchSmsSyncStatus();
+    void fetchLiveMetrics();
+    const detailsTimer = setInterval(() => void fetchDetails(), DETAILS_REFRESH_INTERVAL_MS);
+    const smsTimer = setInterval(() => void fetchSmsSyncStatus(), SMS_STATUS_REFRESH_INTERVAL_MS);
     return () => {
-      if (fallbackTimerRef.current) {
-        window.clearInterval(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
+      clearInterval(detailsTimer);
+      clearInterval(smsTimer);
+      liveAbortRef.current?.abort();
+      detailsAbortRef.current?.abort();
+      smsAbortRef.current?.abort();
+      // 中断的辅助读取在恢复可见时重新执行。
+      if (detailsAbortRef.current) lastDetailsAttemptRef.current = 0;
+      if (smsAbortRef.current) lastSmsAttemptRef.current = 0;
+    };
+  }, [pageVisible, fetchLiveMetrics, fetchDetails, fetchSmsSyncStatus]);
+
+  // SSE 正常连接时完全由事件驱动；只有断线或连接失败才使用 2 秒兜底轮询。
+  useEffect(() => {
+    if (!pageVisible || sseStatus === 'connected') return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poll = async () => {
+      await fetchLiveMetrics();
+      if (!stopped && isPageVisible()) {
+        timer = setTimeout(() => void poll(), LIVE_FALLBACK_POLL_INTERVAL_MS);
       }
     };
-  }, [sseConnected, fetchLiveMetrics]);
+    timer = setTimeout(() => void poll(), LIVE_FALLBACK_POLL_INTERVAL_MS);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [pageVisible, sseStatus, fetchLiveMetrics]);
 
   return {
     overview,
@@ -220,6 +231,7 @@ export function useLiveMetrics() {
     deviceSnapshot,
     smsSync,
     lastRefreshAt,
+    lastRefreshStale,
     refreshAll,
     sseStatus,
   };

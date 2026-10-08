@@ -86,7 +86,7 @@ export default function DashboardHero({
       ]}
       footer={
         <p className="relative mt-4 truncate text-[10px] text-muted-foreground sm:text-xs">
-          设备型号：{deviceName || '-'} · 每 5 秒自动刷新实时状态
+          设备型号：{deviceName || '-'} · 可见时约每秒更新速率，信号约每 2 秒更新
         </p>
       }
     />

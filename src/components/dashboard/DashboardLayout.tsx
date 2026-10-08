@@ -12,7 +12,8 @@ export interface DashboardCardConfig {
   visible: boolean;
 }
 
-const STORAGE_KEY = 'cpeye-dashboard-layout';
+const STORAGE_KEY = 'cpe-monitor-dashboard-layout';
+const LEGACY_STORAGE_KEY = 'cpeye-dashboard-layout';
 
 const DEFAULT_CARDS: DashboardCardConfig[] = [
   { id: 'status-pills', label: '状态指标', visible: true },
@@ -26,7 +27,8 @@ const DEFAULT_CARDS: DashboardCardConfig[] = [
 
 function loadLayout(): DashboardCardConfig[] {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEY)
+      ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored) as DashboardCardConfig[];
       // Merge with defaults to handle new cards
@@ -41,6 +43,7 @@ function loadLayout(): DashboardCardConfig[] {
 function saveLayout(cards: DashboardCardConfig[]) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch { /* ignore */ }
 }
 

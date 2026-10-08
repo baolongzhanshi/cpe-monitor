@@ -140,7 +140,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
             {currentStep.label}
           </DialogTitle>
           <DialogDescription>
-            {step === 0 && '欢迎使用 CPEye！接下来几步将帮助你完成基本配置。'}
+            {step === 0 && '欢迎使用 CPE Monitor！接下来几步将帮助你完成基本配置。'}
             {step === 1 && '配置你的 CPE 路由器连接信息，用于采集流量和设备数据。'}
             {step === 2 && '可选：配置通知渠道，在告警触发时接收提醒。可稍后在设置中配置。'}
             {step === 3 && '配置定时数据采集，系统将按设定间隔自动收集流量数据。'}
@@ -156,7 +156,7 @@ export function SetupWizard({ open, onComplete }: SetupWizardProps) {
                 <Rocket className="h-8 w-8 text-brand" />
               </div>
               <p className="text-sm text-muted-foreground">
-                CPEye 帮助你监控 CPE 路由器的流量、信号和设备状态。<br />
+                CPE Monitor 帮助你监控 CPE 路由器的流量、信号和设备状态。<br />
                 让我们花 1 分钟完成初始设置。
               </p>
             </div>

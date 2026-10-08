@@ -19,6 +19,10 @@
 
 # production
 /build
+/native-dist/
+/installers/
+/desktop-native/bin/
+/desktop-native/obj/
 /src-tauri/resources/
 /src-tauri/binaries/
 /src-tauri/target/

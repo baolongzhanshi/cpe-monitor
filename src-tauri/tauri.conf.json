@@ -1,25 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CPEye",
-  "version": "0.1.1",
+  "productName": "CPE Monitor",
+  "version": "0.3.0",
   "identifier": "com.cpeye.monitor",
   "build": {
     "frontendDist": "../desktop-shell"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "CPEye 5G CPE 监控",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 1024,
-        "minHeight": 720,
-        "visible": true,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": "default-src 'self' http://127.0.0.1:3210; connect-src 'self' http://127.0.0.1:3210; img-src 'self' data: blob: http://127.0.0.1:3210; style-src 'self' 'unsafe-inline' http://127.0.0.1:3210; script-src 'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:3210"
     }
@@ -44,7 +32,7 @@
         ]
       },
       "webviewInstallMode": {
-        "type": "downloadBootstrapper"
+        "type": "skip"
       }
     },
     "icon": [

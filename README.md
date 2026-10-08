@@ -21,9 +21,9 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 
 ## 技术栈
 
-- 框架: Next.js 16 (App Router)
-- UI: Base UI + TailwindCSS v4
-- 动效: framer-motion
+- Windows 界面: .NET 10 Windows Forms 宿主 + WebView2 内嵌现代页面，数据仍来自本机后台
+- 本地后台与 Web 控制台: Next.js 16 (App Router)
+- Web UI: Base UI + TailwindCSS v4 + framer-motion
 - 数据库: SQLite (`better-sqlite3`, WAL)
 - 数据迁移: 内置版本化 Migration (`PRAGMA user_version`)
 - 认证: JWT (jose) + bcryptjs
@@ -35,25 +35,24 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 
 ### Windows 桌面安装包（普通用户推荐）
 
-发布页提供 `CPEye_*_x64-setup.exe`。普通用户只需要：
+发布页提供 `CPEMonitor_*_x64-setup.exe`。普通用户只需要：
 
-1. 双击安装包，按向导完成安装；如果系统没有 WebView2，安装程序会自动下载安装。
-2. 启动 CPEye，直接进入控制台，无需管理员密码。桌面服务只监听本机地址。
+1. 双击安装包，按向导完成安装；Node.js 与 .NET 运行时随安装包提供。安装器自动检测 WebView2，缺少时使用随包提供的微软引导器联网安装，无需手工配置开发环境。
+2. 启动 CPE Monitor，直接进入控制台，无需管理员密码。桌面服务只监听本机地址。
 3. 进入「系统设置 → CPE 连接」填写 CPE 地址、用户名和密码，再进入「系统设置 → PushPlus 推送」填写 Token 并发送测试消息。
 
-关闭窗口后程序留在系统托盘，并释放网页界面资源，后台短信同步会继续运行；从托盘或快捷方式再次打开即可恢复界面。在托盘菜单选择「退出并停止同步」才会结束服务。数据库和密钥保存在当前 Windows 用户的 AppData 目录，不写入安装目录。
+Windows 客户端在软件窗口内展示现代页面，不打开外部浏览器。有实时页面订阅时，后台目标频率为速率每 1 秒、信号每 2 秒、在线数量每 5 秒；采完通过 SSE 直接更新数值和曲线。失去焦点继续更新，最小化挂起页面，关闭窗口释放 WebView2；全部实时订阅关闭后后台降为每 15 秒采集，短信同步独立运行。实际频率受设备响应耗时限制。数据过期或失败显示旧数据标记，不用界面时钟冒充采集时间。在托盘菜单选择退出才会结束服务。数据库、配套密钥和页面缓存保存在当前 Windows 用户的 AppData 目录；升级继续使用旧版数据目录。
 
-新安装默认每 15 秒轮询一次 CPE；设置页直接以「秒」显示和输入间隔。程序启动时自动恢复已启用的后台同步；未配置 CPE 密码时会跳过自动轮询，关闭窗口缩到托盘后仍按同一周期检查短信。PushPlus 的接口受理并不等同于微信端秒级到达，实际延迟还受 CPE 响应、网络和 PushPlus 队列影响。
+新安装默认每 15 秒检查一次 CPE 短信计数和联系人摘要；有变化立即读取完整短信，无变化时每分钟完整核对。手动同步始终执行完整核对。设置页以秒显示和输入间隔。程序启动时恢复已启用的后台同步；未配置 CPE 密码时跳过自动轮询。PushPlus 的接口受理并不等同于微信端秒级到达，实际延迟还受 CPE 响应、网络和 PushPlus 队列影响。窗口打开时 WebView2 仍占用内存，关闭窗口后释放页面；实际资源占用需要在相同设备、配置与测量条件下验证。
 
 ### 从源码构建 Windows 安装包
 
-推荐使用仓库内的 GitHub Actions `Windows 安装包` 工作流。它在 Windows 构建机上安装 Rust、下载与项目 Node ABI 匹配的 Node 运行时、构建 Next standalone 并产出 NSIS `.exe`。本机手工构建需要 Rust/Cargo、WebView2 开发环境和 `CPE_NODE_RUNTIME` 指向 Windows x64 的 `node.exe`，例如：
+推荐使用仓库内的 GitHub Actions `Windows 原生安装包` 工作流。它在 Windows 构建机上使用 .NET 10、下载与项目 Node ABI 匹配的 Node 运行时、构建本地后台和现代页面宿主，并产出 `CPEMonitor_0.3.0_x64-setup.exe`。本机手工构建需要 .NET 10 SDK、NSIS 和 `CPE_NODE_RUNTIME` 指向 Windows x64 的 `node.exe`，例如：
 
 ```powershell
 npm ci
 $env:CPE_NODE_RUNTIME = 'C:\tools\node\node.exe'
-npm run build:desktop
-npm exec -- tauri build
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-native.ps1
 ```
 
 ### Windows / Docker 一键部署（开发与服务器）
@@ -106,7 +105,7 @@ CPE_CONFIG_SECRET=your_long_stable_config_secret
 npm run dev
 ```
 
-访问 http://localhost:3000，使用配置的密码登录。
+访问 http://localhost:8010，使用配置的密码登录。
 
 `CPE_PASSWORD` 只在服务端读取，不能提交到 Git。成功登录后的 SessionID、请求校验 Token 和 RSA 会话参数会使用 AES-256-GCM 加密后保存到 SQLite，服务重启后优先复用；只有 CPE 明确返回会话失效时才会清除旧会话并重新登录一次。通过设置页面保存的 CPE 密码、SMTP 密码和企业微信 Webhook 同样使用 AES-256-GCM 加密，旧版本留下的明文会在首次服务端读取时自动迁移。设置接口只向浏览器返回“已配置”状态，不会返回现有密钥。`CPE_CONFIG_SECRET` 和 `CPE_SESSION_SECRET` 必须保持稳定，缺省时依次回退到其他 CPE 密钥和 `JWT_SECRET`。所有 CPE HTTP 请求默认 15 秒超时，可通过 `CPE_REQUEST_TIMEOUT_MS` 调整。
 
@@ -127,7 +126,7 @@ npm run check
 
 - **预设色板**：青蓝（默认 Hue 201）、靛蓝、紫罗兰、品红、珊瑚、琥珀、翡翠、薄荷、天蓝、玫红
 - **自定义 Hue**：0–360° 滑杆实时预览，渐变轨道直观选色
-- **持久化**：保存在 localStorage（`cpeye-theme-hue`），无需后端改动，刷新后自动恢复
+- **持久化**：保存在 localStorage（`cpe-monitor-theme-hue`），兼容读取旧版设置，刷新后自动恢复
 - **入口**：设置页「主题色」区块，或顶部导航调色板按钮快捷切换
 - **图表联动**：Chart.js 组件读取 CSS 变量，切换主题色后图表自动跟随重绘
 
@@ -229,7 +228,7 @@ src/
 - `POST /api/dashboard/sms/sync` - 立即从 CPE 同步短信
 - `GET/POST /api/dashboard/sms/settings` - 查看或修改短信自动同步设置
 
-短信同步独立于流量监控任务，新安装默认开启并每 15 秒检查一次；设置页以秒为单位，可调整为 15–86400 秒（24 小时）或暂停。升级时保留已有用户设置；需要更快推送的已有用户可在「短信自动同步」中将间隔改为 15 秒。数据库和 API 仍以分钟存储，15 秒对应 `sms_sync_interval=0.25`；短信接受小数分钟，设备信息定时同步仍要求整数分钟。未配置 CPE 密码时跳过自动同步；上一轮未完成时会复用进行中的任务，避免请求堆积。首次同步只建立本地快照，不会把历史短信批量推送出去；之后发现新的收件短信时，只有已启用且配置完整的邮箱、企业微信或 PushPlus 通知渠道会收到通知。
+短信同步独立于流量监控任务，新安装默认开启并每 15 秒检查摘要；有变化立即完整读取，无变化时每分钟完整核对。设置页以秒为单位，可调整为 15–86400 秒（24 小时）或暂停。升级时保留已有用户设置；需要更快推送的已有用户可在「短信自动同步」中将间隔改为 15 秒。数据库和 API 仍以分钟存储，15 秒对应 `sms_sync_interval=0.25`；短信接受小数分钟，设备信息定时同步仍要求整数分钟。未配置 CPE 密码时跳过自动同步；上一轮未完成时复用进行中的任务。首次同步只建立本地快照，不会批量推送历史；之后发现新的收件短信时，已启用且配置完整的邮箱、企业微信或 PushPlus 通知渠道会收到通知。
 
 ### 报告
 - `GET /api/reports/daily` - 报告列表

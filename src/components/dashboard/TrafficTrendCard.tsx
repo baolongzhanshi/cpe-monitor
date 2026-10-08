@@ -21,7 +21,7 @@ export default function TrafficTrendCard({
           <div>
             <CardTitle className="text-base sm:text-lg">流量趋势</CardTitle>
             <p className="mt-1 hidden text-sm text-muted-foreground sm:block">
-              根据相邻采集点的增量计算平均上下行速率，不直接使用累计计数器。
+              历史段按采集增量计算平均速率，末尾实时段显示设备当前上下行速率。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

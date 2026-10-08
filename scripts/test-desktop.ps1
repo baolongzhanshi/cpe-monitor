@@ -78,56 +78,56 @@ try {
     if ($firstRun.PSObject.Properties.Name -contains 'password' -or $firstRun.available -ne $false) { throw '首次密码接口仍泄露管理员密码' }
     $serverPid = (Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess
     $desktopLog = Join-Path $env:APPDATA 'com.cpeye.monitor/desktop-events.log'
-    function Get-DashboardPageLoadCount {
+    function Get-BrowserOpenCount {
         if (-not (Test-Path $desktopLog)) { return 0 }
-        return [regex]::Matches([IO.File]::ReadAllText($desktopLog), '本地页面 Finished: /dashboard').Count
+        return [regex]::Matches([IO.File]::ReadAllText($desktopLog), '已请求默认浏览器打开控制台').Count
     }
     for ($attempt = 0; $attempt -lt 40; $attempt++) {
-        if ((Get-DashboardPageLoadCount) -gt 0) { break }
+        if ((Get-BrowserOpenCount) -gt 0) { break }
         Start-Sleep -Milliseconds 500
     }
-    $initialPageLoads = Get-DashboardPageLoadCount
-    if ($initialPageLoads -eq 0) {
+    $initialBrowserOpens = Get-BrowserOpenCount
+    if ($initialBrowserOpens -eq 0) {
         if (Test-Path $desktopLog) { Get-Content $desktopLog }
-        throw '桌面窗口没有真正进入控制台'
+        throw '未能请求默认浏览器打开控制台'
     }
-    # 关闭页面后释放 WebView，后台服务保持原进程；再次运行只恢复窗口。
-    $script:cpeWindowTitle = $null
-    for ($attempt = 0; $attempt -lt 40; $attempt++) {
-        $appProcess.Refresh()
-        if ($appProcess.MainWindowHandle -ne 0) { $script:cpeWindowTitle = $appProcess.MainWindowTitle; break }
-        Start-Sleep -Milliseconds 500
+    function Assert-NoAppWebView {
+        $processes = @(Get-CimInstance Win32_Process)
+        $descendants = [Collections.Generic.HashSet[int]]::new()
+        [void]$descendants.Add($appProcess.Id)
+        do {
+            $added = $false
+            foreach ($process in $processes) {
+                if ($descendants.Contains([int]$process.ParentProcessId) -and $descendants.Add([int]$process.ProcessId)) { $added = $true }
+            }
+        } while ($added)
+        if ($processes | Where-Object { $descendants.Contains([int]$_.ProcessId) -and $_.Name -eq 'msedgewebview2.exe' }) {
+            throw '浏览器模式仍创建了应用 WebView 子进程'
+        }
     }
-    $originalWindow = $appProcess.MainWindowHandle
-    Write-Output "检测到应用窗口标题：$script:cpeWindowTitle"
-    if ($originalWindow -eq [IntPtr]::Zero) { throw '未找到应用主窗口' }
-    Write-Output "关闭前：进程=$($appProcess.Id)，窗口=$($appProcess.MainWindowHandle)，已退出=$($appProcess.HasExited)"
-    if (-not $appProcess.CloseMainWindow()) { throw '未能关闭测试窗口' }
-    Start-Sleep -Seconds 3
-    $appProcess.Refresh()
-    Write-Output "关闭后：进程=$($appProcess.Id)，窗口=$($appProcess.MainWindowHandle)，已退出=$($appProcess.HasExited)"
-    # 托盘可能另有原生窗口；验收只判断刚关闭的应用主窗口是否销毁。
-    if ($appProcess.HasExited -or [CpeSmokeWindows]::IsWindow($originalWindow)) { throw '托盘后台状态验收失败' }
+    Assert-NoAppWebView
+    # 无应用窗口时后台独立存活；重复运行只打开浏览器，复用已有 Node。
     $backgroundHealth = Invoke-RestMethod 'http://127.0.0.1:3210/api/system/health' -TimeoutSec 5
-    if ($backgroundHealth.status -ne 'ok') { throw '关闭窗口后后台服务停止' }
+    if ($backgroundHealth.status -ne 'ok') { throw '托盘后台服务停止' }
     $serverPid = (Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess
     $secondLaunch = Start-Process -FilePath (Join-Path $installRoot 'cpeye-desktop.exe') -WindowStyle Hidden -PassThru
     try {
         for ($attempt = 0; $attempt -lt 40; $attempt++) {
             $appProcess.Refresh()
-            if ((Get-CpeMainWindow $appProcess.Id) -ne [IntPtr]::Zero -and (Get-DashboardPageLoadCount) -gt $initialPageLoads) { break }
+            if ((Get-BrowserOpenCount) -gt $initialBrowserOpens) { break }
             Start-Sleep -Milliseconds 500
         }
-        if ((Get-CpeMainWindow $appProcess.Id) -eq [IntPtr]::Zero -or (Get-DashboardPageLoadCount) -le $initialPageLoads) {
+        if ((Get-BrowserOpenCount) -le $initialBrowserOpens) {
             if (Test-Path $desktopLog) { Get-Content $desktopLog }
-            throw '未能重新打开控制台窗口'
+            throw '重复启动未请求浏览器打开控制台'
         }
-        if ((Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess -ne $serverPid) { throw '重新打开窗口重启了后台服务' }
+        if ((Get-NetTCPConnection -LocalPort 3210 -State Listen).OwningProcess -ne $serverPid) { throw '重复启动重启了后台服务' }
         if (-not $secondLaunch.WaitForExit(5000)) { throw '单实例检查失败' }
+        Assert-NoAppWebView
     } finally {
         if (-not $secondLaunch.HasExited) { Stop-Process -Id $secondLaunch.Id -Force }
     }
-    Write-Output '安装、服务、无密码控制台、核心 API、托盘后台及重新打开验收通过'
+    Write-Output '安装、无密码控制台、核心 API、托盘后台、默认浏览器、无 WebView 及单实例验收通过'
 } finally {
     if ($appProcess -and -not $appProcess.HasExited) {
         & taskkill.exe /PID $appProcess.Id /T /F | Out-Null

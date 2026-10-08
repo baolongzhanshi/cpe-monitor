@@ -58,7 +58,7 @@ export function TopNav({ alertUnreadCount = 0, onAlertBellClick, connectionStatu
             <RadioTower className="h-4 w-4 lg:h-5 lg:w-5" aria-hidden />
           </span>
           <span className="min-w-0">
-            <span className="block text-base font-extrabold tracking-tight lg:text-lg">CPEye</span>
+            <span className="block text-base font-extrabold tracking-tight lg:text-lg">CPE Monitor</span>
             <span className="hidden text-[10px] font-semibold uppercase tracking-[.18em] text-muted-foreground lg:block">Network Console</span>
           </span>
         </Link>

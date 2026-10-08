@@ -3,12 +3,13 @@
  *
  * Extracted from CpeClient to enforce Single Responsibility Principle.
  */
-import { extractXmlTag, isCpeAuthenticationFailure } from './cpe-protocol';
-import { buildXmlRequest } from './cpe-protocol';
-import { decryptSmsEnvelope, generateHexNonce } from './cpe-crypto';
+import { extractXmlTag, isCpeAuthenticationFailure } from './cpe-protocol.ts';
+import { buildXmlRequest } from './cpe-protocol.ts';
+import { decryptSmsEnvelope, generateHexNonce } from './cpe-crypto.ts';
 import type { CpeAuthenticator } from './cpe-authenticator';
 import type { CpeSmsMessage } from '@/types/cpe';
-import { parseCpeRecord } from './cpe-protocol';
+import { parseCpeRecord } from './cpe-protocol.ts';
+import { getExpectedLocalSmsCount, validateSmsCount, type SmsOverview } from './sms-lightweight-sync.ts';
 
 const SMS_PAGE_SIZE = 50;
 const SMS_MAX_PAGES = 20;
@@ -21,36 +22,58 @@ export class CpeSmsReader {
   }
 
   async getSmsCount(): Promise<Record<string, string>> {
-    return parseCpeRecord(await this.auth.apiGet('/api/sms/sms-count'));
+    const count = parseCpeRecord(await this.auth.apiGet('/api/sms/sms-count'));
+    validateSmsCount(count);
+    return count;
   }
 
-  async getSmsMessages(): Promise<{ messages: CpeSmsMessage[]; count: Record<string, string> }> {
-    const readSnapshot = async () => {
+  async getSmsOverview(): Promise<SmsOverview> {
+    const readOverview = async () => {
       const count = await this.getSmsCount();
       const contacts = await this.fetchContactMessages();
+      return { count, contacts };
+    };
+    let overview = await readOverview();
+    if (getExpectedLocalSmsCount(overview.count) > 0 && overview.contacts.length === 0) {
+      const ok = await this.auth.relogin();
+      if (!ok) throw new Error(this.auth.getLastLoginError());
+      overview = await readOverview();
+      if (getExpectedLocalSmsCount(overview.count) > 0 && overview.contacts.length === 0) {
+        throw new Error('CPE 有短信，但未返回联系人列表，请稍后重试。');
+      }
+    }
+    return overview;
+  }
+
+  async getSmsMessages(overview?: SmsOverview): Promise<{ messages: CpeSmsMessage[]; count: Record<string, string> }> {
+    const readSnapshot = async (snapshot: SmsOverview) => {
+      const { count, contacts } = snapshot;
       const messages = await this.fetchPhoneMessages(contacts);
 
-      const source = messages.length > 0 ? messages : contacts;
       const unique = new Map<string, CpeSmsMessage>();
-      for (const message of source) unique.set(message.id, message);
+      for (const message of messages) unique.set(`${message.box}|${message.id}`, message);
       return {
         messages: [...unique.values()].sort((a, b) => b.date.localeCompare(a.date)),
         count,
       };
     };
 
-    let result = await readSnapshot();
-    const expectedMessages = Number(result.count.LocalInbox || 0);
-    if (expectedMessages > 0 && result.messages.length === 0) {
+    let result = await readSnapshot(overview || await this.getSmsOverview());
+    if (getExpectedLocalSmsCount(result.count) > 0 && result.messages.length === 0) {
       const ok = await this.auth.relogin();
       if (!ok) throw new Error(this.auth.getLastLoginError());
-      result = await readSnapshot();
+      result = await readSnapshot(await this.getSmsOverview());
+      if (getExpectedLocalSmsCount(result.count) > 0 && result.messages.length === 0) {
+        throw new Error('CPE 有短信，但未返回短信正文，请稍后重试。');
+      }
     }
     return result;
   }
 
   parseSmsMessages(xml: string): CpeSmsMessage[] {
-    if (!xml || /<error[\s>]/i.test(xml)) return [];
+    if (/<error[\s>]/i.test(xml)) throw new Error('CPE 短信接口返回错误，请稍后重试。');
+    if (!xml) throw new Error('CPE 短信接口返回空响应，请稍后重试。');
+    if (!/<(?:response|messages)[\s>]/i.test(xml)) throw new Error('CPE 短信接口响应格式异常，请稍后重试。');
     const messages: CpeSmsMessage[] = [];
     const blocks = xml.matchAll(/<message>([\s\S]*?)<\/message>/gi);
     for (const block of blocks) {
@@ -89,6 +112,9 @@ export class CpeSmsReader {
       if (pageMessages.length === 0) break;
       contacts.push(...pageMessages);
       if (pageMessages.length < SMS_PAGE_SIZE) break;
+      if (page === SMS_MAX_PAGES) {
+        throw new Error('CPE 短信联系人超过读取上限，本次同步未完成。');
+      }
     }
     return contacts;
   }
@@ -96,6 +122,7 @@ export class CpeSmsReader {
   private async fetchPhoneMessages(contacts: CpeSmsMessage[]): Promise<CpeSmsMessage[]> {
     const phoneNumbers = [...new Set(contacts.map((m) => m.phone).filter(Boolean))];
     const messages: CpeSmsMessage[] = [];
+    let emptyPhones = 0;
     for (const phone of phoneNumbers) {
       for (let page = 1; page <= SMS_MAX_PAGES; page += 1) {
         const xml = await this.apiPostEncrypted('/api/sms/sms-list-phone', {
@@ -104,10 +131,19 @@ export class CpeSmsReader {
           readcount: SMS_PAGE_SIZE,
         }, true);
         const pageMessages = this.parseSmsMessages(xml);
-        if (pageMessages.length === 0) break;
+        if (pageMessages.length === 0) {
+          if (page === 1) emptyPhones += 1;
+          break;
+        }
         messages.push(...pageMessages);
         if (pageMessages.length < SMS_PAGE_SIZE) break;
+        if (page === SMS_MAX_PAGES) {
+          throw new Error('CPE 短信历史超过读取上限，本次同步未完成。');
+        }
       }
+    }
+    if (emptyPhones > 0 && messages.length > 0) {
+      throw new Error('部分 CPE 联系人未返回短信正文，本次同步未完成。');
     }
     return messages;
   }
@@ -154,7 +190,7 @@ export class CpeSmsReader {
     }
 
     const xml = result.text;
-    if (/<error[\s>]/i.test(xml)) return '';
+    if (/<error[\s>]/i.test(xml)) throw new Error('CPE 短信接口返回错误，请稍后重试。');
     this.auth.persistSession();
 
     const encrypted = extractXmlTag(xml, 'pwd');

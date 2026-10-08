@@ -1,6 +1,6 @@
-/// CPEye PWA：页面与静态资源优先缓存，API 响应只走网络。
+/// CPE Monitor PWA：页面与静态资源优先缓存，API 响应只走网络。
 
-const CACHE_NAME = 'cpeye-v3';
+const CACHE_NAME = 'cpe-monitor-v4';
 const STATIC_ASSETS = [
   '/dashboard',
   '/manifest.json',

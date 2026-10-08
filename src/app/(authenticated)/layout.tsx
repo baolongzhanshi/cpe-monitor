@@ -13,6 +13,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAlertNotification } from '@/hooks/useAlertNotification';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 export default function AuthenticatedLayout({
   children,
@@ -26,6 +27,7 @@ export default function AuthenticatedLayout({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const pageVisible = usePageVisibility();
   const { unreadCount, markAsRead, sseStatus } = useAlertNotification();
 
   useKeyboardShortcuts({
@@ -59,22 +61,37 @@ export default function AuthenticatedLayout({
     checkAuth();
   }, [router]);
 
-  // Fetch SMS unread count
+  // 仅可见页面读取本地短信计数，后台设备同步独立运行。
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !pageVisible) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let controller: AbortController | null = null;
+    const isVisible = () => document.visibilityState !== 'hidden';
     const fetchSmsUnread = async () => {
+      if (stopped || !isVisible()) return;
+      controller = new AbortController();
       try {
-        const res = await fetch('/api/dashboard/sms?page=1&pageSize=1');
+        const res = await fetch('/api/dashboard/sms?page=1&pageSize=1', { signal: controller.signal });
         if (res.ok) {
           const data = await res.json();
-          setSmsUnread(data.unread || 0);
+          if (!stopped && isVisible()) setSmsUnread(data.unread || 0);
         }
-      } catch { /* ignore */ }
+      } catch {
+        // 保留最近一次计数，等待下一轮本地读取。
+      } finally {
+        if (!stopped && isVisible()) {
+          timer = setTimeout(() => void fetchSmsUnread(), 15_000);
+        }
+      }
     };
-    void fetchSmsUnread();
-    const timer = setInterval(() => void fetchSmsUnread(), 60_000);
-    return () => clearInterval(timer);
-  }, [isAuthenticated]);
+    timer = setTimeout(() => void fetchSmsUnread(), 0);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [isAuthenticated, pageVisible]);
 
   if (isAuthenticated === null) {
     return (

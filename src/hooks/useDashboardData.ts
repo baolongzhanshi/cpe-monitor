@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { apiFetch } from '@/lib/client-api';
 import { formatLocalTime, getSignalQuality, getUpdateStateLabel } from '@/lib/format';
 import { formatSyncInterval } from '@/lib/sync-interval';
+import { mergeLiveChartHistory } from '@/lib/live-view-model';
 import { useTrafficHistory } from './useTrafficHistory';
 import { useLiveMetrics } from './useLiveMetrics';
 import { useSchedulerControl } from './useSchedulerControl';
@@ -38,6 +39,7 @@ export function useDashboardData() {
     deviceSnapshot,
     smsSync,
     lastRefreshAt,
+    lastRefreshStale,
     refreshAll,
     sseStatus,
   } = useLiveMetrics();
@@ -90,7 +92,7 @@ export function useDashboardData() {
   const rate = trafficStats || {};
   const isConnected = overview?.connectionStatus === '901';
   const updateLabel = getUpdateStateLabel(overview?.updateState);
-  const cell = deviceSnapshot?.cellInformation || {};
+  const cell = overview?.networkSnapshot || deviceSnapshot?.cellInformation || {};
   const deviceName = getSnapshotValue(
     deviceSnapshot?.deviceInformation,
     ['DeviceName', 'spreadname_zh', 'spreadname_en'],
@@ -109,11 +111,16 @@ export function useDashboardData() {
   const metricHistory = liveMetricHistory.length >= 2
     ? liveMetricHistory
     : trafficHistory;
+  const chartHistory = useMemo(
+    () => mergeLiveChartHistory(trafficHistory, liveMetricHistory),
+    [trafficHistory, liveMetricHistory],
+  );
 
   return {
     overview,
     trafficHistory,
     metricHistory,
+    chartHistory,
     timeRange,
     setTimeRange,
     loading,
@@ -128,6 +135,7 @@ export function useDashboardData() {
     schedulerSaving,
     refreshing,
     lastRefreshAt,
+    lastRefreshStale,
     signalQuality,
     rate,
     isConnected,

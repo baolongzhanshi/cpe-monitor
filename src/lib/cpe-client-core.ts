@@ -7,6 +7,7 @@
 import { CpeAuthenticator } from './cpe-authenticator';
 import { CpeNetworkReader } from './cpe-network-reader';
 import { CpeSmsReader } from './cpe-sms-reader';
+import type { SmsOverview } from './sms-lightweight-sync';
 import { buildXmlRequest, parseCpeRecord } from './cpe-protocol';
 import type {
   CpeDevice,
@@ -221,8 +222,12 @@ export class CpeClient {
     return this.sms.getSmsCount();
   }
 
-  async getSmsMessages(): Promise<{ messages: CpeSmsMessage[]; count: Record<string, string> }> {
-    return this.sms.getSmsMessages();
+  async getSmsOverview(): Promise<SmsOverview> {
+    return this.sms.getSmsOverview();
+  }
+
+  async getSmsMessages(overview?: SmsOverview): Promise<{ messages: CpeSmsMessage[]; count: Record<string, string> }> {
+    return this.sms.getSmsMessages(overview);
   }
 
   // ─── Host / Device List ───────────────────────────────────────────────

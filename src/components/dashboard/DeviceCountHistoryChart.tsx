@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from 'chart.js';
 import type { TrafficHistoryPoint } from '@/hooks/useDashboardData';
+import { parseDateTime } from '@/lib/date-time';
 
 ChartJS.register(
   CategoryScale,
@@ -60,14 +61,14 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
   }, [resolvedTheme, hue]);
 
   const chartData = useMemo(() => ({
-    labels: data.map((entry) => new Date(`${entry.timestamp.replace(' ', 'T')}Z`)
-      .toLocaleString('zh-CN', {
+    labels: data.map((entry) => parseDateTime(entry.timestamp)
+      ?.toLocaleString('zh-CN', {
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         timeZone: 'Asia/Shanghai',
-      })),
+      }) || '-'),
     datasets: [{
       label: '在线设备',
       data: data.map((entry) => entry.connectedDevices ?? null),
@@ -84,6 +85,7 @@ export default function DeviceCountHistoryChart({ data }: DeviceCountHistoryChar
 
   const options = useMemo(() => ({
     responsive: true,
+    animation: false as const,
     maintainAspectRatio: false,
     interaction: {
       mode: 'index' as const,

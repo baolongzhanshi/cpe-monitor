@@ -7,7 +7,8 @@
  */
 
 export const DEFAULT_HUE = 201;
-export const STORAGE_KEY = 'cpeye-theme-hue';
+export const STORAGE_KEY = 'cpe-monitor-theme-hue';
+const LEGACY_STORAGE_KEY = 'cpeye-theme-hue';
 
 export interface ThemePreset {
   name: string;
@@ -122,7 +123,8 @@ export function applyThemeHue(hue: number, isDark: boolean): void {
 export function readStoredHue(): number {
   if (typeof window === 'undefined') return DEFAULT_HUE;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw === null) return DEFAULT_HUE;
     const parsed = Number.parseInt(raw, 10);
     return Number.isFinite(parsed) ? normalizeHue(parsed) : DEFAULT_HUE;
@@ -135,6 +137,8 @@ export function readStoredHue(): number {
 export function storeHue(hue: number): void {
   if (typeof window === 'undefined') return;
   try {
+    // 写入新键后移除旧键，保留升级读取兼容且避免重置后恢复旧设置。
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
     if (hue === DEFAULT_HUE) {
       window.localStorage.removeItem(STORAGE_KEY);
     } else {

@@ -11,6 +11,8 @@ import {
   DEFAULT_CPE_URL,
   DEFAULT_CPE_USERNAME,
   getCpeConfigRow,
+  getCpeCredentials,
+  isCpeConfigured,
 } from '@/lib/settings-store';
 
 export const POST = withApiHandler(async (request) => {
@@ -26,7 +28,8 @@ export const POST = withApiHandler(async (request) => {
   const config = getCpeConfigRow();
   const finalUrl = body.cpeUrl || config?.cpe_url || DEFAULT_CPE_URL;
   const finalUsername = body.cpeUsername || config?.cpe_username || DEFAULT_CPE_USERNAME;
-  const finalPassword = body.cpePassword || config?.cpe_password_encrypted;
+  const finalPassword = body.cpePassword?.trim()
+    || (isCpeConfigured() ? getCpeCredentials().password : '');
 
   if (!finalPassword) {
     throw new ApiError('请先输入 CPE 密码', 400);

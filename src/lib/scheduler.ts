@@ -20,6 +20,8 @@ import { markDailyReportSent, upsertDailyReport, upsertPeriodReport } from './re
 import { ensureSmsSchedulerStarted } from './sms-sync-scheduler';
 import { ensureDeviceInfoSchedulerStarted } from './device-info-sync-scheduler';
 import { writeSystemLog } from './system-log';
+import { ensureRealtimeCollectorStarted } from './realtime-collector';
+import { getTrafficSchedulerStatus, setTrafficSchedulerRunning } from './traffic-scheduler-status';
 
 // ─── Re-exports for backward compatibility ──────────────────────────────
 export { checkAlerts } from './alert-service';
@@ -55,20 +57,27 @@ export type { DeviceInfoSyncStatus } from './device-info-sync-scheduler';
 
 // ─── Traffic collection & daily report scheduling ───────────────────────
 
-let hourlyTask: ScheduledTask | null = null;
-let dailyTask: ScheduledTask | null = null;
-let weeklyTask: ScheduledTask | null = null;
-let monthlyTask: ScheduledTask | null = null;
+interface SchedulerTasks {
+  hourlyTask: ScheduledTask | null;
+  dailyTask: ScheduledTask | null;
+  weeklyTask: ScheduledTask | null;
+  monthlyTask: ScheduledTask | null;
+}
+const shared = globalThis as typeof globalThis & { __cpeMonitorSchedulerTasks?: SchedulerTasks };
+const tasks = shared.__cpeMonitorSchedulerTasks ??= {
+  hourlyTask: null, dailyTask: null, weeklyTask: null, monthlyTask: null,
+};
 
 export function getSchedulerStatus(): { running: boolean } {
-  return { running: hourlyTask !== null };
+  return { ...getTrafficSchedulerStatus() };
 }
 
 export function stopScheduler(): void {
-  if (hourlyTask) { hourlyTask.stop(); hourlyTask = null; }
-  if (dailyTask) { dailyTask.stop(); dailyTask = null; }
-  if (weeklyTask) { weeklyTask.stop(); weeklyTask = null; }
-  if (monthlyTask) { monthlyTask.stop(); monthlyTask = null; }
+  if (tasks.hourlyTask) { tasks.hourlyTask.stop(); tasks.hourlyTask = null; }
+  if (tasks.dailyTask) { tasks.dailyTask.stop(); tasks.dailyTask = null; }
+  if (tasks.weeklyTask) { tasks.weeklyTask.stop(); tasks.weeklyTask = null; }
+  if (tasks.monthlyTask) { tasks.monthlyTask.stop(); tasks.monthlyTask = null; }
+  setTrafficSchedulerRunning(false);
 }
 
 export async function startScheduler(): Promise<void> {
@@ -90,7 +99,7 @@ export async function startScheduler(): Promise<void> {
           ? '*/30 * * * *'
           : '0 * * * *';
 
-    hourlyTask = cron.schedule(
+    tasks.hourlyTask = cron.schedule(
       cronExpression,
       async () => {
         console.log('Running traffic collection...');
@@ -100,8 +109,9 @@ export async function startScheduler(): Promise<void> {
       },
       { timezone: APP_TIME_ZONE },
     );
+    setTrafficSchedulerRunning(true);
 
-    dailyTask = cron.schedule(
+    tasks.dailyTask = cron.schedule(
       '0 22 * * *',
       async () => {
         console.log('Generating daily report...');
@@ -111,7 +121,7 @@ export async function startScheduler(): Promise<void> {
     );
 
     // Weekly report: Sunday 22:30
-    weeklyTask = cron.schedule(
+    tasks.weeklyTask = cron.schedule(
       '30 22 * * 0',
       () => {
         console.log('Generating weekly report...');
@@ -121,7 +131,7 @@ export async function startScheduler(): Promise<void> {
     );
 
     // Monthly report: 1st of month 00:30
-    monthlyTask = cron.schedule(
+    tasks.monthlyTask = cron.schedule(
       '30 0 1 * *',
       () => {
         console.log('Generating monthly report...');
@@ -136,9 +146,11 @@ export async function startScheduler(): Promise<void> {
 
   await ensureSmsSchedulerStarted();
   await ensureDeviceInfoSchedulerStarted();
+  await ensureRealtimeCollectorStarted();
 }
 
 export async function ensureSchedulerStarted(): Promise<void> {
+  if (process.env.CPE_ISOLATED_TEST === 'true') return;
   initializeDatabase();
   const settings = getSettingsMap();
 
@@ -153,6 +165,7 @@ export async function ensureSchedulerStarted(): Promise<void> {
 
   await ensureSmsSchedulerStarted();
   await ensureDeviceInfoSchedulerStarted();
+  await ensureRealtimeCollectorStarted();
 }
 
 // ─── Daily Report ───────────────────────────────────────────────────────

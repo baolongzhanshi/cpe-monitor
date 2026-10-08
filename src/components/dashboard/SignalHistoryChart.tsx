@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from 'chart.js';
 import type { TrafficHistoryPoint } from '@/hooks/useDashboardData';
+import { parseDateTime, parseTimestampMs } from '@/lib/date-time';
 
 ChartJS.register(
   CategoryScale,
@@ -67,14 +68,14 @@ function readThemeColors(): ThemeColors {
 }
 
 function formatLabel(timestamp: string, showDate: boolean): string {
-  const date = new Date(`${timestamp.replace(' ', 'T')}Z`);
-  return date.toLocaleString('zh-CN', {
+  const date = parseDateTime(timestamp);
+  return date?.toLocaleString('zh-CN', {
     month: showDate ? '2-digit' : undefined,
     day: showDate ? '2-digit' : undefined,
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Asia/Shanghai',
-  });
+  }) || '-';
 }
 
 export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
@@ -96,8 +97,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
     const first = data[0]?.timestamp;
     const last = data[data.length - 1]?.timestamp;
     const spanMs = first && last
-      ? new Date(`${last.replace(' ', 'T')}Z`).getTime()
-        - new Date(`${first.replace(' ', 'T')}Z`).getTime()
+      ? (parseTimestampMs(last) ?? 0) - (parseTimestampMs(first) ?? 0)
       : 0;
     const showDate = spanMs > 24 * 60 * 60 * 1000;
 
@@ -158,6 +158,7 @@ export default function SignalHistoryChart({ data }: SignalHistoryChartProps) {
 
   const options = useMemo(() => ({
     responsive: true,
+    animation: false as const,
     maintainAspectRatio: false,
     interaction: {
       mode: 'index' as const,

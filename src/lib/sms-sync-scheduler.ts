@@ -14,6 +14,8 @@ import { getSettingsMap, isCpeConfigured, readNotificationConfig, setSetting } f
 import { createIntervalScheduler, type SyncStatus } from './interval-scheduler';
 import { hasStoredSmsChanged, type ExistingSmsRecord } from './sms-sync-utils';
 import { SMS_SYNC_INTERVAL } from './sync-interval';
+import { createSmsLightweightSync, ensureFullSmsSync } from './sms-lightweight-sync';
+import type { CpeSmsMessage } from '@/types/cpe';
 
 export const SMS_SYNC_MIN_INTERVAL = SMS_SYNC_INTERVAL.minInterval;
 export const SMS_SYNC_MAX_INTERVAL = SMS_SYNC_INTERVAL.maxInterval;
@@ -28,7 +30,17 @@ export interface SmsSyncResult {
   notificationsSent: number;
   firstSync: boolean;
   syncedAt: string;
+  fullSync: boolean;
 }
+
+const lightweightSync = createSmsLightweightSync<SmsSyncResult>({
+  getClient: getOrCreateCpeClient,
+  persistMessages: persistSmsMessages,
+  skippedResult: () => ({
+    fetched: 0, inserted: 0, updated: 0, notificationsSent: 0,
+    firstSync: false, syncedAt: new Date().toISOString(), fullSync: false,
+  }),
+});
 
 const scheduler = createIntervalScheduler({
   name: 'SMS sync',
@@ -38,7 +50,7 @@ const scheduler = createIntervalScheduler({
   maxInterval: SMS_SYNC_MAX_INTERVAL,
   allowFractionalInterval: true,
   shouldRun: isCpeConfigured,
-  task: () => performSmsSync(),
+  task: (source) => performSmsSync(source),
 });
 
 export function getSmsSyncStatus(): SmsSyncStatus {
@@ -50,11 +62,13 @@ export function isValidSmsSyncInterval(value: unknown): value is number {
 }
 
 export async function restartSmsScheduler(): Promise<SmsSyncStatus> {
+  lightweightSync.reset();
   return scheduler.restart();
 }
 
 export function stopSmsScheduler(): void {
   scheduler.stop();
+  lightweightSync.reset();
 }
 
 export async function ensureSmsSchedulerStarted(): Promise<void> {
@@ -62,15 +76,17 @@ export async function ensureSmsSchedulerStarted(): Promise<void> {
 }
 
 export async function syncSmsMessages(): Promise<SmsSyncResult> {
-  return scheduler.sync() as Promise<SmsSyncResult>;
+  return ensureFullSmsSync((source) => scheduler.sync(source) as Promise<SmsSyncResult>);
 }
 
 // ─── Business Logic ────────────────────────────────────────────────────────
 
-async function performSmsSync(): Promise<SmsSyncResult> {
+async function performSmsSync(source: 'scheduler' | 'manual'): Promise<SmsSyncResult> {
   initializeDatabase();
-  const client = getOrCreateCpeClient();
-  const { messages } = await client.getSmsMessages();
+  return lightweightSync.run(source);
+}
+
+async function persistSmsMessages(messages: CpeSmsMessage[]): Promise<SmsSyncResult> {
   const existingCount = (
     db.prepare('SELECT COUNT(*) as count FROM sms_messages').get() as { count?: number } | undefined
   )?.count || 0;
@@ -151,5 +167,5 @@ async function performSmsSync(): Promise<SmsSyncResult> {
   const syncedAt = new Date().toISOString();
   setSetting('sms_initial_sync_completed', 'true');
   console.log(`SMS sync completed: ${messages.length} messages${firstSync ? ' (initial snapshot)' : ''}`);
-  return { fetched: messages.length, inserted, updated, notificationsSent, firstSync, syncedAt };
+  return { fetched: messages.length, inserted, updated, notificationsSent, firstSync, syncedAt, fullSync: true };
 }

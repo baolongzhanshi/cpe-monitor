@@ -8,6 +8,8 @@ import { useEffect } from 'react';
  */
 export function PWARegister() {
   useEffect(() => {
+    // 软件宿主总是读取随当前安装包分发的页面，避免旧 Service Worker 锁住旧界面。
+    if ((window as Window & { __CPE_MONITOR_DESKTOP__?: boolean }).__CPE_MONITOR_DESKTOP__) return;
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
         .register('/sw.js')

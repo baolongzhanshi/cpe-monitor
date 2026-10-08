@@ -12,6 +12,7 @@ import {
 import { LoadingBlock } from '@/components/LoadingBlock';
 import DeviceDetailDialog from '@/components/DeviceDetailDialog';
 import RefreshButton from '@/components/RefreshButton';
+import { RefreshIndicator } from '@/components/dashboard/RefreshIndicator';
 import DeviceIdentityHero from '@/components/device/DeviceIdentityHero';
 import CapabilitySummaryRow from '@/components/device/CapabilitySummaryRow';
 import DeviceInfoSections from '@/components/device/DeviceInfoSections';
@@ -44,6 +45,9 @@ export default function DevicePage() {
     deviceError,
     devicesError,
     refreshDevicePage,
+    sseStatus,
+    lastRefreshAt,
+    lastRefreshStale,
   } = useDevicePage();
 
   if (loading) {
@@ -86,7 +90,15 @@ export default function DevicePage() {
         description="聚合设备身份、蜂窝状态、拓扑、能力和在线终端接口。"
         icon={<Router className="h-6 w-6" />}
         actions={
-          <RefreshButton onClick={() => { void refreshDevicePage(); }} />
+          <div className="flex flex-wrap items-center gap-3">
+            <RefreshIndicator
+              sseStatus={sseStatus}
+              lastRefreshAt={lastRefreshAt}
+              lastRefreshStale={lastRefreshStale}
+              collectionIntervalMs={2_000}
+            />
+            <RefreshButton onClick={() => { void refreshDevicePage(); }} />
+          </div>
         }
       />
 

@@ -1,53 +1,35 @@
-import { eventBus, type CpeEvent } from '@/lib/event-bus';
+import { eventBus } from '@/lib/event-bus';
 import { getSession } from '@/lib/auth';
+import { createEventStream } from '@/lib/sse-stream';
+import { ensureSchedulerStarted } from '@/lib/scheduler';
+import { acquireRealtimeSubscriber, getRealtimeSnapshot } from '@/lib/realtime-collector';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await getSession();
   if (!session) {
     return new Response('Unauthorized', { status: 401 });
   }
 
-  const encoder = new TextEncoder();
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  await ensureSchedulerStarted();
+  // 顶栏告警连接不提高采集频率；实际展示实时数据的可见页面才持有订阅租约。
+  const watchesMetrics = new URL(request.url).searchParams.get('metrics') !== '0';
+  const release = watchesMetrics ? acquireRealtimeSubscriber() : () => {};
+  const snapshot = watchesMetrics ? getRealtimeSnapshot() : null;
 
-  const stream = new ReadableStream({
-    start(controller) {
-      const send = (event: CpeEvent) => {
-        try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
-          );
-        } catch {
-          // Client disconnected
-        }
-      };
-
-      // Send initial connection event
-      send({
-        type: 'connection',
-        payload: { status: 'connected' },
-        timestamp: new Date().toISOString(),
-      });
-
-      // Subscribe to event bus
-      eventBus.on('message', send);
-
-      // Heartbeat every 30s to keep connection alive
-      heartbeatTimer = setInterval(() => {
-        try {
-          controller.enqueue(encoder.encode(': heartbeat\n\n'));
-        } catch {
-          // Client disconnected
-        }
-      }, 30_000);
+  const stream = createEventStream({
+    eventBus,
+    signal: request.signal,
+    initialEvent: {
+      type: 'connection',
+      payload: { status: 'connected' },
+      timestamp: new Date().toISOString(),
     },
-    cancel() {
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
-      eventBus.removeAllListeners('message');
-    },
+    initialEvents: snapshot ? [{ type: 'metrics', payload: snapshot, timestamp: new Date().toISOString() }] : [],
+    onClose: release,
+    filter: (event) => watchesMetrics || !(event && typeof event === 'object' && 'type' in event && event.type === 'metrics'),
   });
 
   return new Response(stream, {

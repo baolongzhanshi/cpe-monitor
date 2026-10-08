@@ -76,7 +76,7 @@ export default function PasswordLogin() {
             </span>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-brand/70">CPE monitor</p>
             <CardTitle className="bg-gradient-to-r from-brand to-info bg-clip-text text-3xl font-bold tracking-tight text-transparent">
-              CPEye
+              CPE Monitor
             </CardTitle>
             <CardDescription className="text-sm leading-6">
               5G CPE 流量监控 · 告警与每日报告

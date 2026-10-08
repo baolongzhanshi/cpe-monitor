@@ -1,5 +1,5 @@
 /**
- * Shared formatting utilities for CPEye dashboard.
+ * CPE Monitor 仪表盘的共享格式化工具。
  * Single source of truth for all data display formatting.
  */
 

@@ -31,5 +31,7 @@ class CpeEventBus extends EventEmitter {
   }
 }
 
-/** Global singleton event bus. */
-export const eventBus = new CpeEventBus();
+const shared = globalThis as typeof globalThis & { __cpeMonitorEventBus?: CpeEventBus };
+
+// 路由和后台可能被 Next 编进不同模块，统一复用进程内的事件总线。
+export const eventBus = shared.__cpeMonitorEventBus ??= new CpeEventBus();

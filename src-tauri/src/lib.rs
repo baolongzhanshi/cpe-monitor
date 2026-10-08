@@ -8,9 +8,10 @@ use std::{
 };
 use tauri::{
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager,
 };
+use tauri_plugin_opener::OpenerExt;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
@@ -26,7 +27,18 @@ fn boxed_error(error: impl std::fmt::Display) -> Box<dyn std::error::Error> {
 struct AppState {
     sidecar: Mutex<Option<Child>>,
     exiting: AtomicBool,
-    opening_window: AtomicBool,
+    opening_browser: AtomicBool,
+}
+
+impl Drop for AppState {
+    fn drop(&mut self) {
+        // 退出或启动中途失败时，只清理本实例启动的 Node，不触碰其他应用。
+        let child = self.sidecar.get_mut().unwrap_or_else(|error| error.into_inner());
+        if let Some(mut child) = child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -150,75 +162,54 @@ fn local_server_ready() -> bool {
     BufReader::new(stream).read_line(&mut status).is_ok() && status.starts_with("HTTP/1.1 200 ")
 }
 
-fn navigate_when_ready(app: AppHandle) {
+fn open_dashboard(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    if state.exiting.load(Ordering::SeqCst)
+        || state.opening_browser.swap(true, Ordering::SeqCst)
+    {
+        return;
+    }
+    let app = app.clone();
+    // 只在打开控制台时检测服务就绪；没有页面时不创建 WebView 或轮询线程。
     std::thread::spawn(move || {
         for _ in 0..60 {
-            if app.state::<AppState>().exiting.load(Ordering::SeqCst) { return; }
+            if app.state::<AppState>().exiting.load(Ordering::SeqCst) {
+                app.state::<AppState>().opening_browser.store(false, Ordering::SeqCst);
+                return;
+            }
             if local_server_ready() {
-                if let Some(window) = app.get_webview_window("main") {
-                    match MAIN_URL.parse() {
-                        Ok(url) => {
-                            if let Err(error) = window.navigate(url) { record_desktop_event(&app, &format!("打开控制台失败: {error}")); }
-                        }
-                        Err(error) => record_desktop_event(&app, &format!("控制台地址无效: {error}")),
-                    }
+                if let Some(tray) = app.tray_by_id("main") {
+                    let _ = tray.set_tooltip(Some("CPE Monitor 监控服务运行中"));
                 }
+                // 地址固定为本机控制台，不接受命令行传入的 URL 或外部程序。
+                match app.opener().open_url(MAIN_URL, None::<&str>) {
+                    Ok(()) => record_desktop_event(&app, "已请求默认浏览器打开控制台"),
+                    Err(error) => record_desktop_event(&app, &format!("打开默认浏览器失败: {error}")),
+                }
+                app.state::<AppState>().opening_browser.store(false, Ordering::SeqCst);
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(500));
         }
         record_desktop_event(&app, "内置服务未就绪");
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.eval("document.getElementById('status').textContent = '本地服务启动失败，请从托盘退出后重新打开。';");
+        if let Some(tray) = app.tray_by_id("main") {
+            let _ = tray.set_tooltip(Some("CPE Monitor 本地服务未就绪，请退出后重新打开"));
         }
-    });
-}
-
-fn show_main_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-        return;
-    }
-    let state = app.state::<AppState>();
-    if state.opening_window.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    let handle = app.clone();
-    // Windows 创建 WebView 必须离开同步事件回调，避免阻塞主事件循环。
-    std::thread::spawn(move || {
-        let result = handle.config().app.windows.iter()
-            .find(|config| config.label == "main")
-            .cloned()
-            .ok_or_else(|| boxed_error("缺少主窗口配置"))
-            .and_then(|mut config| {
-                config.url = WebviewUrl::External(MAIN_URL.parse().map_err(boxed_error)?);
-                WebviewWindowBuilder::from_config(&handle, &config)
-                    .map_err(boxed_error)?.build().map_err(boxed_error)
-            });
-        match result {
-            Ok(window) => { let _ = window.set_focus(); }
-            Err(error) => record_desktop_event(&handle, &format!("重新打开主窗口失败: {error}")),
-        }
-        handle.state::<AppState>().opening_window.store(false, Ordering::SeqCst);
+        app.state::<AppState>().opening_browser.store(false, Ordering::SeqCst);
     });
 }
 
 pub fn run() {
     tauri::Builder::default()
-        .on_page_load(|webview, payload| {
-            if payload.url().host_str() == Some("127.0.0.1") {
-                record_desktop_event(webview.app_handle(), &format!("本地页面 {:?}: {}", payload.event(), payload.url().path()));
-            }
-        })
-        // 重复打开应用只恢复窗口，避免额外 Node 进程和端口争用。
+        // 重复启动只请求打开浏览器，现有后台服务和短信调度保持同一进程。
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+            open_dashboard(app);
         }))
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             sidecar: Mutex::new(None),
             exiting: AtomicBool::new(false),
-            opening_window: AtomicBool::new(false),
+            opening_browser: AtomicBool::new(false),
         })
         .setup(|app| {
             let app_data_dir = app.path().app_data_dir().map_err(boxed_error)?;
@@ -230,19 +221,27 @@ pub fn run() {
             let child = spawn_server(app, &secrets, &app_data_dir)?;
             app.state::<AppState>().sidecar.lock().map_err(|_| boxed_error("sidecar 状态锁定失败"))?.replace(child);
 
-            // 由原生宿主检测服务就绪并导航，避免启动页跨域请求受到 WebView 策略限制。
-            navigate_when_ready(app.handle().clone());
-
-            let show = MenuItem::with_id(app, "show", "打开 CPEye", true, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "用浏览器打开 CPE Monitor", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "退出并停止同步", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
             let handle = app.handle().clone();
-            TrayIconBuilder::new()
+            TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().expect("缺少应用图标").clone())
                 .menu(&menu)
-                .tooltip("CPEye 监控服务运行中")
+                .tooltip("CPE Monitor 正在启动本地服务")
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        open_dashboard(tray.app_handle());
+                    }
+                })
                 .on_menu_event(move |_tray, event| match event.id.as_ref() {
-                    "show" => show_main_window(&handle),
+                    "show" => open_dashboard(&handle),
                     "quit" => {
                         handle.state::<AppState>().exiting.store(true, Ordering::SeqCst);
                         handle.exit(0);
@@ -251,25 +250,11 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            open_dashboard(app.handle());
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                let state = window.state::<AppState>();
-                if !state.exiting.load(Ordering::SeqCst) {
-                    // 释放整个 WebView，托盘和 Node 同步服务继续运行。
-                    api.prevent_close();
-                    // 先关闭 WebView 控制器，避免它继续持有原生窗口资源。
-                    if let Some(webview_window) = window.get_webview_window("main") {
-                        let webview: &tauri::Webview = webview_window.as_ref();
-                        let _ = webview.close();
-                    }
-                    let _ = window.destroy();
-                }
-            }
-        })
         .build(tauri::generate_context!())
-        .expect("启动 CPEye 桌面端失败")
+        .expect("启动 CPE Monitor 桌面端失败")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 if !app.state::<AppState>().exiting.load(Ordering::SeqCst) {

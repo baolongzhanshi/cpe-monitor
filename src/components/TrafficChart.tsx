@@ -15,6 +15,7 @@ import {
 } from 'chart.js';
 import zoomPlugin from 'chartjs-plugin-zoom';
 import 'hammerjs';
+import { parseDateTime, parseTimestampMs } from '@/lib/date-time';
 import {
   useChartTheme,
   buildTooltipOptions,
@@ -63,20 +64,20 @@ export function TrafficChart({ data }: TrafficChartProps) {
       const firstTimestamp = data[0]?.timestamp;
       const lastTimestamp = data[data.length - 1]?.timestamp;
       const spanMs = firstTimestamp && lastTimestamp
-        ? new Date(`${lastTimestamp.replace(' ', 'T')}Z`).getTime()
-          - new Date(`${firstTimestamp.replace(' ', 'T')}Z`).getTime()
+        ? (parseTimestampMs(lastTimestamp) ?? 0) - (parseTimestampMs(firstTimestamp) ?? 0)
         : 0;
 
       return ({
       labels: data.map((entry) => {
-        const date = new Date(`${entry.timestamp.replace(' ', 'T')}Z`);
-        return date.toLocaleString('zh-CN', {
+        const date = parseDateTime(entry.timestamp);
+        return date?.toLocaleString('zh-CN', {
           month: spanMs > 24 * 60 * 60 * 1000 ? '2-digit' : undefined,
           day: spanMs > 24 * 60 * 60 * 1000 ? '2-digit' : undefined,
           hour: '2-digit',
           minute: spanMs <= 7 * 24 * 60 * 60 * 1000 ? '2-digit' : undefined,
+          second: spanMs < 5 * 60 * 1000 ? '2-digit' : undefined,
           timeZone: 'Asia/Shanghai',
-        });
+        }) || '-';
       }),
       datasets: [
         {
@@ -110,6 +111,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
   const options = useMemo(
     () => ({
       responsive: true,
+      animation: false as const,
       maintainAspectRatio: false,
       interaction: {
         mode: 'index' as const,

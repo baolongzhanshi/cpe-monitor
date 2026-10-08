@@ -60,14 +60,15 @@ export default function DashboardPage() {
               <RefreshIndicator
                 sseStatus={data.sseStatus}
                 lastRefreshAt={data.lastRefreshAt}
+                lastRefreshStale={data.lastRefreshStale}
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge
-                variant={data.overview?.source === 'cpe' ? 'default' : 'secondary'}
+                variant={data.overview?.source === 'cpe' && !data.lastRefreshStale ? 'default' : 'secondary'}
                 className="rounded-full px-3 py-1"
               >
-                {data.overview?.source === 'cpe' ? '实时 CPE 数据' : '数据库兜底数据'}
+                {data.lastRefreshStale ? '最近一次数据' : data.overview?.source === 'cpe' ? '实时 CPE 数据' : '数据库兜底数据'}
               </Badge>
               <RefreshButton
                 onClick={() => { void data.refreshDashboard(); }}
@@ -180,7 +181,7 @@ export default function DashboardPage() {
         <TrafficTrendCard
           timeRange={data.timeRange}
           onTimeRangeChange={data.setTimeRange}
-          data={data.trafficHistory}
+          data={data.chartHistory}
         />
         <Card className="card-hover py-4 sm:py-5">
           <CardHeader className="px-4 sm:px-6">
@@ -204,7 +205,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <NetworkHistoryGrid data={data.trafficHistory} />
+      <NetworkHistoryGrid data={data.chartHistory} />
 
       <TrafficCompareCard />
 

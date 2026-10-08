@@ -1,6 +1,6 @@
 {
-  "name": "CPEye - 5G CPE 流量监控",
-  "short_name": "CPEye",
+  "name": "CPE Monitor - 5G CPE 流量监控",
+  "short_name": "CPE Monitor",
   "description": "H153-381 5G CPE 流量监控、告警通知、每日报告",
   "start_url": "/dashboard",
   "display": "standalone",

@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { apiFetch } from '@/lib/client-api';
 import { formatSyncTime } from '@/lib/format';
 import { formatSyncInterval } from '@/lib/sync-interval';
+import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 interface SmsMessage {
   id: string;
@@ -70,6 +71,7 @@ function getRecentDailyLabels(dayCount = 7) {
 }
 
 export default function SmsPage() {
+  const pageVisible = usePageVisibility();
   const reduce = useReducedMotion();
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [total, setTotal] = useState(0);
@@ -86,12 +88,24 @@ export default function SmsPage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const messageAbortRef = useRef<AbortController | null>(null);
+  const messagePendingRef = useRef<Promise<void> | null>(null);
+  const pageRef = useRef(1);
+  const loadedQueryRef = useRef<string | null>(null);
+  const queryKey = JSON.stringify([filter, direction, keyword]);
 
-  const loadMessages = useCallback(async (pageNum = 1, append = false) => {
-    if (pageNum === 1) setLoading(true);
-    else setLoadingMore(true);
-    setError('');
-    try {
+  const loadMessages = useCallback(async (pageNum = 1, append = false, silent = false) => {
+    if (document.visibilityState === 'hidden') return;
+    if (messagePendingRef.current) return messagePendingRef.current;
+    const controller = new AbortController();
+    messageAbortRef.current = controller;
+    if (!silent) {
+      if (pageNum === 1) setLoading(true);
+      else setLoadingMore(true);
+      setError('');
+    }
+    const task = (async () => {
+      try {
       const params = new URLSearchParams({
         page: String(pageNum),
         pageSize: '50',
@@ -105,20 +119,62 @@ export default function SmsPage() {
         unread?: number;
         sync?: SmsSyncStatus | null;
         hasMore?: boolean;
-      }>(`/api/dashboard/sms?${params.toString()}`, undefined, '获取短信失败');
-      setMessages((prev) => append ? [...prev, ...(data.messages || [])] : (data.messages || []));
+      }>(`/api/dashboard/sms?${params.toString()}`, { signal: controller.signal }, '获取短信失败');
+      if (controller.signal.aborted || document.visibilityState === 'hidden') return;
+      loadedQueryRef.current = queryKey;
+      setError('');
+      const incoming = data.messages || [];
+      setMessages((prev) => {
+        let next = incoming;
+        if (append || (silent && pageRef.current > 1)) {
+          // 自动更新保留已展开的历史记录，分页重叠按短信 ID 去重。
+          const combined = append ? [...prev, ...incoming] : [...incoming, ...prev];
+          const seen = new Set<string>();
+          next = combined.filter((message) => {
+            if (seen.has(message.id)) return false;
+            seen.add(message.id);
+            return true;
+          });
+        }
+        const unchanged = next.length === prev.length && next.every((message, index) => {
+          const previous = prev[index];
+          return previous.id === message.id && previous.phone === message.phone
+            && previous.content === message.content && previous.date === message.date
+            && previous.unread === message.unread && previous.direction === message.direction;
+        });
+        return unchanged ? prev : next;
+      });
       setTotal(data.total || 0);
       setUnread(data.unread || 0);
-      setSync(data.sync || null);
-      setHasMore(data.hasMore || false);
-      setPage(pageNum);
+      setSync((previous) => {
+        const next = data.sync || null;
+        return previous?.enabled === next?.enabled && previous?.interval === next?.interval
+          && previous?.running === next?.running && previous?.lastSyncedAt === next?.lastSyncedAt
+          && previous?.lastError === next?.lastError ? previous : next;
+      });
+      if (!silent || pageRef.current === 1) setHasMore(data.hasMore || false);
+      if (!silent) {
+        pageRef.current = pageNum;
+        setPage(pageNum);
+      }
     } catch (loadError) {
+      if (controller.signal.aborted || document.visibilityState === 'hidden') return;
       setError(loadError instanceof Error ? loadError.message : '获取短信失败');
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [filter, direction, keyword]);
+    })();
+    messagePendingRef.current = task;
+    try {
+      await task;
+    } finally {
+      if (messagePendingRef.current === task) messagePendingRef.current = null;
+      if (messageAbortRef.current === controller) messageAbortRef.current = null;
+    }
+  }, [filter, direction, keyword, queryKey]);
 
   async function syncAndLoadMessages() {
     setSyncing(true);
@@ -139,14 +195,29 @@ export default function SmsPage() {
   }
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void loadMessages(1, false); }, 0);
-    return () => window.clearTimeout(timer);
-  }, [loadMessages]);
+    if (!pageVisible) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const poll = async () => {
+      await loadMessages(1, false, loadedQueryRef.current === queryKey);
+      if (!stopped && document.visibilityState !== 'hidden') {
+        timer = setTimeout(() => void poll(), 15_000);
+      }
+    };
+    timer = setTimeout(() => void poll(), 0);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      messageAbortRef.current?.abort();
+      messageAbortRef.current = null;
+      messagePendingRef.current = null;
+    };
+  }, [pageVisible, loadMessages, queryKey]);
 
   // Infinite scroll observer
   useEffect(() => {
     const sentinel = sentinelRef.current;
-    if (!sentinel || !hasMore || loading || loadingMore) return;
+    if (!pageVisible || !sentinel || !hasMore || loading || loadingMore) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
@@ -157,7 +228,7 @@ export default function SmsPage() {
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, page, loadMessages]);
+  }, [pageVisible, hasMore, loading, loadingMore, page, loadMessages]);
 
   function applyQuery(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
