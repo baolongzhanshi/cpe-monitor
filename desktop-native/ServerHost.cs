@@ -11,7 +11,39 @@ internal sealed class ServerHost : IDisposable
     private ProcessJob? job;
     private readonly CancellationTokenSource stopping = new();
     private bool disposed;
-    internal static int Port => int.TryParse(Environment.GetEnvironmentVariable("CPE_MONITOR_PORT"), out var value) && value is > 1024 and <= 65535 ? value : 3210;
+    private static readonly Lazy<int> resolvedPort = new(ResolvePort);
+    internal static int Port => resolvedPort.Value;
+
+    /// <summary>
+    /// 解析本机后台端口。默认从 3210 起找第一个空闲端口。
+    ///
+    /// 这里遇到占用时不再直接报错：第二个实例会被单实例锁拦在前面，
+    /// 遗留后台也在启动时清理过了，所以此时占着端口的通常是无关程序，
+    /// 顺延一个端口比让用户自己去排查更合适。全部被占时才回退到 3210 并报错。
+    /// </summary>
+    private static int ResolvePort()
+    {
+        if (int.TryParse(Environment.GetEnvironmentVariable("CPE_MONITOR_PORT"), out var configured)
+            && configured is > 1024 and <= 65535)
+            return configured;
+        for (var candidate = 3210; candidate <= 3220; candidate++)
+        {
+            if (IsPortFree(candidate)) return candidate;
+        }
+        return 3210;
+    }
+
+    private static bool IsPortFree(int port)
+    {
+        try
+        {
+            var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            listener.Stop();
+            return true;
+        }
+        catch (SocketException) { return false; }
+    }
     internal static string DataDirectory => Environment.GetEnvironmentVariable("CPE_MONITOR_DATA_DIR") ??
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "com.cpeye.monitor");
     public async Task StartAsync(ApiClient api, CancellationToken ct)
@@ -29,7 +61,7 @@ internal sealed class ServerHost : IDisposable
             try
             {
                 await probe.ConnectAsync(IPAddress.Loopback, Port, ct);
-                throw new InvalidOperationException($"本机 {Port} 端口已被占用。请先从旧版 CPEye 或 CPE Monitor 的托盘菜单退出，再启动新版；配置会保留。");
+                throw new InvalidOperationException($"本机 {Port} 端口已被占用，请关闭占用该端口的程序后重试。");
             }
             catch (SocketException) { }
         }
