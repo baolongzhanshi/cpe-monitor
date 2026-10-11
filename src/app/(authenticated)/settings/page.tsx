@@ -21,6 +21,7 @@ import { DataBackupSection } from '@/components/settings/DataBackupSection';
 import { EmailNotificationSection } from '@/components/settings/EmailNotificationSection';
 import { WechatNotificationSection } from '@/components/settings/WechatNotificationSection';
 import { PushplusNotificationSection } from '@/components/settings/PushplusNotificationSection';
+import { DailyReportPushSection } from '@/components/settings/DailyReportPushSection';
 import { ThemeColorSection } from '@/components/settings/ThemeColorSection';
 import { useSettingsPage } from '@/hooks/useSettingsPage';
 import { formatSyncInterval } from '@/lib/sync-interval';
@@ -221,6 +222,14 @@ export default function SettingsPage() {
             testing={settings.testingPushplus}
             onSave={() => { void settings.savePushplusConfig(); }}
             onTest={() => { void settings.testPushplus(); }}
+          />
+          <DailyReportPushSection
+            open={settings.openSection === 'reportPush'}
+            onOpenChange={(open) => settings.setOpenSection(open ? 'reportPush' : null)}
+            value={settings.dailyReportPush}
+            onChange={settings.setDailyReportPush}
+            saving={settings.savingDailyReportPush}
+            onSave={() => { void settings.saveDailyReportPush(); }}
           />
           <DataBackupSection />
         </div>

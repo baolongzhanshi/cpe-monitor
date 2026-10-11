@@ -1,4 +1,5 @@
 import type { CpeSmsMessage } from '@/lib/cpe-client';
+import type { AlertPayload, DailyReportPayload } from './types';
 
 export interface PushplusConfig {
   token: string;
@@ -86,5 +87,41 @@ export async function sendPushplusSms(
   ].join('');
   const result = await sendPushplusMessage(config, 'CPE 收到新短信', content);
   if (!result.accepted) console.error('PushPlus SMS notification was not accepted:', result.message);
+  return result.accepted;
+}
+
+export async function sendAlertPushplus(
+  config: PushplusConfig,
+  alert: AlertPayload,
+): Promise<boolean> {
+  const content = [
+    `<h2>CPE 告警通知</h2>`,
+    `<p><strong>规则：</strong>${escapeHtml(alert.ruleName)}</p>`,
+    `<p><strong>时间：</strong>${escapeHtml(alert.timestamp)}</p>`,
+    `<p><strong>详情：</strong>${escapeHtml(alert.message)}</p>`,
+    '<p>请及时检查设备状态。</p>',
+  ].join('');
+  const result = await sendPushplusMessage(config, `CPE 告警 - ${alert.ruleName}`, content);
+  if (!result.accepted) console.error('PushPlus alert notification was not accepted:', result.message);
+  return result.accepted;
+}
+
+export async function sendDailyReportPushplus(
+  config: PushplusConfig,
+  report: DailyReportPayload,
+): Promise<boolean> {
+  const content = [
+    `<h2>CPE 流量日报 - ${escapeHtml(report.date)}</h2>`,
+    '<h3>今日概览</h3>',
+    `<p><strong>总下载：</strong>${escapeHtml(report.totalDownload)}</p>`,
+    `<p><strong>总上传：</strong>${escapeHtml(report.totalUpload)}</p>`,
+    `<p><strong>在线设备：</strong>${report.deviceCount} 台</p>`,
+    '<h3>网络质量</h3>',
+    `<p><strong>评级：</strong>${escapeHtml(report.networkQuality)}</p>`,
+    `<p><strong>平均信号：</strong>${report.avgSignal} dBm</p>`,
+    '<p>由 CPE Monitor 自动生成</p>',
+  ].join('');
+  const result = await sendPushplusMessage(config, `CPE 流量日报 - ${report.date}`, content);
+  if (!result.accepted) console.error('PushPlus daily report notification was not accepted:', result.message);
   return result.accepted;
 }

@@ -11,6 +11,7 @@ export interface AlertRuleWriteInput {
   enabled: boolean;
   notifyEmail: boolean;
   notifyWechat: boolean;
+  notifyPushplus: boolean;
   cooldownMinutes: number;
 }
 
@@ -24,8 +25,8 @@ export function createAlertRule(input: AlertRuleWriteInput): AlertRule {
   ensureDatabaseReady();
   const result = db.prepare(
     `INSERT INTO alert_rules
-      (name, metric_type, threshold, operator, enabled, notify_email, notify_wechat, cooldown_minutes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      (name, metric_type, threshold, operator, enabled, notify_email, notify_wechat, notify_pushplus, cooldown_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.name,
     input.metricType,
@@ -34,6 +35,7 @@ export function createAlertRule(input: AlertRuleWriteInput): AlertRule {
     input.enabled ? 1 : 0,
     input.notifyEmail ? 1 : 0,
     input.notifyWechat ? 1 : 0,
+    input.notifyPushplus ? 1 : 0,
     input.cooldownMinutes,
   );
   const row = db.prepare('SELECT * FROM alert_rules WHERE id = ?').get(result.lastInsertRowid) as AlertRuleRow;
@@ -45,7 +47,7 @@ export function updateAlertRule(id: number, input: AlertRuleWriteInput): void {
   db.prepare(
     `UPDATE alert_rules
      SET name = ?, metric_type = ?, threshold = ?, operator = ?, enabled = ?,
-         notify_email = ?, notify_wechat = ?, cooldown_minutes = ?
+         notify_email = ?, notify_wechat = ?, notify_pushplus = ?, cooldown_minutes = ?
      WHERE id = ?`,
   ).run(
     input.name,
@@ -55,6 +57,7 @@ export function updateAlertRule(id: number, input: AlertRuleWriteInput): void {
     input.enabled ? 1 : 0,
     input.notifyEmail ? 1 : 0,
     input.notifyWechat ? 1 : 0,
+    input.notifyPushplus ? 1 : 0,
     input.cooldownMinutes,
     id,
   );

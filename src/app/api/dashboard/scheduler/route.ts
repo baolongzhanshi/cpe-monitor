@@ -6,7 +6,12 @@ import {
   requireSession,
   withApiHandler,
 } from '@/lib/api-route';
-import { startScheduler, stopScheduler, getSchedulerStatus } from '@/lib/scheduler';
+import {
+  getSchedulerStatus,
+  startScheduler,
+  stopScheduler,
+  syncDailyReportSchedule,
+} from '@/lib/scheduler';
 import { getSettingsMap, setSetting } from '@/lib/settings-store';
 
 export const GET = withApiHandler(async () => {
@@ -37,6 +42,7 @@ export const POST = withApiHandler(async (request) => {
     await startScheduler();
   } else {
     stopScheduler();
+    syncDailyReportSchedule();
   }
 
   return jsonOk({

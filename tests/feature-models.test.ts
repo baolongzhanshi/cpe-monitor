@@ -22,6 +22,7 @@ const alertRules: AlertRule[] = [
     enabled: true,
     notifyEmail: true,
     notifyWechat: false,
+    notifyPushplus: true,
     cooldownMinutes: 30,
     createdAt: null,
   },
@@ -34,6 +35,7 @@ const alertRules: AlertRule[] = [
     enabled: false,
     notifyEmail: false,
     notifyWechat: true,
+    notifyPushplus: false,
     cooldownMinutes: 60,
     createdAt: null,
   },
@@ -80,6 +82,8 @@ test('alert overview stats share one source of truth', () => {
   assert.equal(stats.disabledCount, 1);
   assert.equal(stats.emailCount, 1);
   assert.equal(stats.wechatCount, 1);
+  assert.equal(stats.pushplusCount, 1);
+  assert.equal(stats.notifiedCount, 2);
   assert.equal(stats.metricDistribution.reduce((total, value) => total + value, 0), 2);
 });
 

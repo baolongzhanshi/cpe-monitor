@@ -153,6 +153,7 @@ const migrations: Array<{ version: number; migrate: Migration }> = [
           enabled INTEGER DEFAULT 1,
           notify_email INTEGER DEFAULT 1,
           notify_wechat INTEGER DEFAULT 1,
+          notify_pushplus INTEGER DEFAULT 0,
           cooldown_minutes INTEGER DEFAULT 30,
           created_at TEXT DEFAULT (datetime('now'))
         );
@@ -431,6 +432,21 @@ const migrations: Array<{ version: number; migrate: Migration }> = [
         CREATE INDEX IF NOT EXISTS idx_resource_samples_time
         ON resource_samples (sampled_at);
       `);
+    },
+  },
+  {
+    version: 9,
+    migrate(database) {
+      ensureColumn(database, 'alert_rules', 'notify_pushplus', 'INTEGER DEFAULT 0');
+
+      const insertDefault = database.prepare(
+        'INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)',
+      );
+      const defaults: Array<[string, string]> = [
+        ['daily_report_push_enabled', 'true'],
+        ['daily_report_push_time', '22:00'],
+      ];
+      for (const [key, value] of defaults) insertDefault.run(key, value);
     },
   },
 ];

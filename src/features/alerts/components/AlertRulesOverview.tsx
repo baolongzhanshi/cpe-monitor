@@ -42,15 +42,16 @@ export function AlertRulesOverview({ total, loading, stats }: AlertRulesOverview
           chart: <OverviewDonut value={stats.disabledCount} total={Math.max(total, 1)} label="已禁用规则占比" className="text-muted-foreground" />,
         },
         {
-          label: '邮件通知',
-          value: loading ? '…' : String(stats.emailCount),
-          detail: '会发送邮件的规则数',
+          label: '通知覆盖',
+          value: loading ? '…' : String(stats.notifiedCount),
+          detail: '会通过通知渠道发送的规则数',
           icon: <Mail className="h-3.5 w-3.5" />,
           chart: (
             <OverviewSegments
               segments={[
                 { label: '邮件', value: stats.emailCount },
                 { label: '企微', value: stats.wechatCount },
+                { label: 'PushPlus', value: stats.pushplusCount },
               ]}
               label="告警通知渠道覆盖"
             />

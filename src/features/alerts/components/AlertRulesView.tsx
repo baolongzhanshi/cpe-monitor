@@ -1,4 +1,4 @@
-import { Mail, MessageCircle, Pencil, TimerReset, Trash2 } from 'lucide-react';
+import { Mail, MessageCircle, Pencil, Send, TimerReset, Trash2 } from 'lucide-react';
 import DataTableCard from '@/components/DataTableCard';
 import ResponsiveDataView from '@/components/ResponsiveDataView';
 import { Badge } from '@/components/ui/badge';
@@ -73,6 +73,9 @@ export function AlertRulesView({
             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${rule.notifyWechat ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
               <MessageCircle className="h-3 w-3" />企微{rule.notifyWechat ? '已开启' : '未开启'}
             </span>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${rule.notifyPushplus ? 'bg-brand/10 text-brand' : 'bg-muted text-muted-foreground'}`}>
+              <Send className="h-3 w-3" />PushPlus{rule.notifyPushplus ? '已开启' : '未开启'}
+            </span>
           </div>
 
           <p className="mt-3 text-xs leading-5 text-muted-foreground">{getAlertMetricHint(rule.metricType)}</p>
@@ -119,7 +122,8 @@ export function AlertRulesView({
                 <div className="flex flex-wrap gap-1.5">
                   {rule.notifyEmail ? <Badge variant="info">邮件</Badge> : null}
                   {rule.notifyWechat ? <Badge variant="success">企微</Badge> : null}
-                  {!rule.notifyEmail && !rule.notifyWechat ? <span className="text-muted-foreground">未配置</span> : null}
+                  {rule.notifyPushplus ? <Badge variant="outline">PushPlus</Badge> : null}
+                  {!rule.notifyEmail && !rule.notifyWechat && !rule.notifyPushplus ? <span className="text-muted-foreground">未配置</span> : null}
                 </div>
               </TableCell>
               <TableCell>

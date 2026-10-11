@@ -80,14 +80,15 @@ class FakeDatabase implements SqliteDatabase {
 
 test('database migrations advance once and remain idempotent', () => {
   const database = new FakeDatabase();
-  assert.equal(runDatabaseMigrations(database), 8);
-  assert.equal(database.userVersion, 8);
+  assert.equal(runDatabaseMigrations(database), 9);
+  assert.equal(database.userVersion, 9);
   assert.ok(database.columns.get('traffic_data')?.has('collection_id'));
   assert.ok(database.columns.get('traffic_data')?.has('rsrp'));
   assert.ok(database.columns.get('device_data')?.has('raw_json'));
+  assert.ok(database.columns.get('alert_rules')?.has('notify_pushplus'));
 
   const execCount = database.execCount;
-  assert.equal(runDatabaseMigrations(database), 8);
+  assert.equal(runDatabaseMigrations(database), 9);
   assert.equal(database.execCount, execCount);
 });
 
@@ -96,6 +97,8 @@ test('新数据库将短信默认间隔写为 0.25 分钟，设备信息仍是�
   runDatabaseMigrations(database);
   assert.equal(database.settings.get('sms_sync_interval'), '0.25');
   assert.equal(database.settings.get('device_info_sync_interval'), '360');
+  assert.equal(database.settings.get('daily_report_push_enabled'), 'true');
+  assert.equal(database.settings.get('daily_report_push_time'), '22:00');
 });
 
 test('迁移和再次启动都保留已有用户的短信同步间隔', () => {

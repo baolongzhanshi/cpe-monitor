@@ -10,6 +10,7 @@ export interface AlertRuleRow {
   enabled: number | boolean | null;
   notify_email: number | boolean | null;
   notify_wechat: number | boolean | null;
+  notify_pushplus: number | boolean | null;
   cooldown_minutes: number | null;
   created_at: string | null;
 }
@@ -28,6 +29,7 @@ export function mapAlertRuleRow(row: AlertRuleRow): AlertRule {
     enabled: toBoolean(row.enabled),
     notifyEmail: toBoolean(row.notify_email),
     notifyWechat: toBoolean(row.notify_wechat),
+    notifyPushplus: toBoolean(row.notify_pushplus),
     cooldownMinutes: row.cooldown_minutes ?? 30,
     createdAt: parseDateTime(row.created_at),
   };

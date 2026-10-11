@@ -75,6 +75,7 @@ export function AlertRuleDialog({
             <div className="flex min-h-10 items-center gap-2"><Switch checked={formData.enabled} onCheckedChange={(value) => update('enabled', value)} /><Label>启用规则</Label></div>
             <div className="flex min-h-10 items-center gap-2"><Switch checked={formData.notifyEmail} onCheckedChange={(value) => update('notifyEmail', value)} /><Label>邮件通知</Label></div>
             <div className="flex min-h-10 items-center gap-2"><Switch checked={formData.notifyWechat} onCheckedChange={(value) => update('notifyWechat', value)} /><Label>微信通知</Label></div>
+            <div className="flex min-h-10 items-center gap-2"><Switch checked={formData.notifyPushplus} onCheckedChange={(value) => update('notifyPushplus', value)} /><Label>PushPlus 通知</Label></div>
           </div>
         </div>
         <DialogFooter className="sticky bottom-0 -mx-4 -mb-4 mt-2 grid grid-cols-2 gap-2 border-t border-border/70 bg-background/95 p-4 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:flex sm:border-0 sm:bg-transparent sm:p-0">

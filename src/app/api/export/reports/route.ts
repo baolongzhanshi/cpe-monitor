@@ -3,6 +3,7 @@ import { db, ensureDatabaseReady } from '@/lib/db';
 
 interface ReportExportRow {
   report_date: string;
+  period_type: string | null;
   total_upload: number | null;
   total_download: number | null;
   peak_hour: number | null;
@@ -37,7 +38,7 @@ export const GET = withApiHandler(async (request) => {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const rows = db.prepare(
-    `SELECT report_date, total_upload, total_download, peak_hour,
+    `SELECT report_date, period_type, total_upload, total_download, peak_hour,
             avg_signal, uptime_percent, network_quality, sent_at, created_at
      FROM daily_reports ${whereClause}
      ORDER BY report_date ASC
@@ -45,12 +46,14 @@ export const GET = withApiHandler(async (request) => {
   ).all(...bindings) as ReportExportRow[];
 
   const header = [
-    '日期', '总上传(bytes)', '总下载(bytes)', '峰值时段',
+    '日期', '类型', '总上传(bytes)', '总下载(bytes)', '峰值时段',
     '平均信号', '在线率(%)', '网络质量', '发送时间', '创建时间',
   ].join(',');
 
   const csvRows = rows.map((row) => [
-    row.report_date, row.total_upload, row.total_download,
+    row.report_date,
+    row.period_type === 'weekly' ? '周报' : row.period_type === 'monthly' ? '月报' : '日报',
+    row.total_upload, row.total_download,
     row.peak_hour !== null ? `${row.peak_hour}:00` : '',
     row.avg_signal, row.uptime_percent,
     row.network_quality, row.sent_at, row.created_at,

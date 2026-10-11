@@ -17,6 +17,7 @@ export interface AlertRuleFormData {
   enabled: boolean;
   notifyEmail: boolean;
   notifyWechat: boolean;
+  notifyPushplus: boolean;
   cooldownMinutes: number;
 }
 
@@ -46,6 +47,7 @@ export function createEmptyAlertRuleForm(): AlertRuleFormData {
     enabled: true,
     notifyEmail: true,
     notifyWechat: true,
+    notifyPushplus: true,
     cooldownMinutes: 30,
   };
 }
@@ -59,6 +61,7 @@ export function toAlertRuleForm(rule: AlertRule): AlertRuleFormData {
     enabled: rule.enabled,
     notifyEmail: rule.notifyEmail,
     notifyWechat: rule.notifyWechat,
+    notifyPushplus: rule.notifyPushplus,
     cooldownMinutes: rule.cooldownMinutes,
   };
 }
@@ -104,6 +107,10 @@ export function getAlertRuleStats(rules: AlertRule[]) {
     disabledCount: rules.length - enabledCount,
     emailCount: rules.filter((rule) => rule.notifyEmail).length,
     wechatCount: rules.filter((rule) => rule.notifyWechat).length,
+    pushplusCount: rules.filter((rule) => rule.notifyPushplus).length,
+    notifiedCount: rules.filter((rule) => (
+      rule.notifyEmail || rule.notifyWechat || rule.notifyPushplus
+    )).length,
     metricDistribution: alertMetricOptions.map((metric) => (
       rules.filter((rule) => rule.metricType === metric.value).length
     )),

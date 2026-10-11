@@ -1,5 +1,5 @@
-import type { DailyReport, DeviceRanking } from '@/types';
-import { parseDateTime } from '@/lib/date-time';
+import type { DailyReport, DeviceRanking } from '../../types/index.ts';
+import { parseDateTime } from '../date-time.ts';
 
 export interface DailyReportRow {
   id: number;

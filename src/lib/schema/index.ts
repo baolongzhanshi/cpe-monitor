@@ -118,6 +118,7 @@ export const alertRules = sqliteTable('alert_rules', {
   enabled: integer('enabled').default(1),
   notifyEmail: integer('notify_email').default(1),
   notifyWechat: integer('notify_wechat').default(1),
+  notifyPushplus: integer('notify_pushplus').default(0),
   cooldownMinutes: integer('cooldown_minutes').default(30),
   createdAt: text('created_at').default("datetime('now')"),
 });
@@ -145,6 +146,7 @@ export const systemLogs = sqliteTable('system_logs', {
 export const dailyReports = sqliteTable('daily_reports', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   reportDate: text('report_date').notNull(),
+  periodType: text('period_type').default('daily'),
   totalUpload: integer('total_upload'),
   totalDownload: integer('total_download'),
   peakHour: integer('peak_hour'),
@@ -155,7 +157,7 @@ export const dailyReports = sqliteTable('daily_reports', {
   sentAt: text('sent_at'),
   createdAt: text('created_at').default("datetime('now')"),
 }, (table) => [
-  uniqueIndex('idx_daily_reports_date_unique').on(table.reportDate),
+  uniqueIndex('idx_daily_reports_date_period_unique').on(table.reportDate, table.periodType),
 ]);
 
 // ─── sms_messages ─────────────────────────────────────────────────────────────

@@ -6,7 +6,8 @@ export type SettingsSectionId =
   | 'quota'
   | 'email'
   | 'wechat'
-  | 'pushplus';
+  | 'pushplus'
+  | 'reportPush';
 
 export interface CpeConfigForm {
   cpeUrl: string;
@@ -29,6 +30,11 @@ export interface WechatConfigForm {
 
 export interface PushplusConfigForm {
   token: string;
+}
+
+export interface DailyReportPushForm {
+  enabled: boolean;
+  time: string;
 }
 
 export interface SyncConfigForm {
@@ -95,6 +101,11 @@ export interface PublicWechatApiConfig {
 
 export interface PublicPushplusApiConfig {
   tokenConfigured?: boolean;
+}
+
+export interface DailyReportPushApiConfig {
+  enabled?: boolean;
+  time?: string;
 }
 
 export interface DataQuotaForm {

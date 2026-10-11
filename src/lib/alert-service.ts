@@ -15,6 +15,7 @@ import { sendAlertWechat } from './notifiers/wechat';
 import { sendAlertTelegram } from './notifiers/telegram';
 import { sendAlertDingtalk } from './notifiers/dingtalk';
 import { sendAlertBark } from './notifiers/bark';
+import { sendAlertPushplus } from './notifiers/pushplus';
 import type { AlertPayload } from './notifiers/types';
 import { eventBus } from './event-bus';
 import { writeSystemLog } from './system-log';
@@ -267,6 +268,13 @@ async function dispatchAlertNotifications(
     const wechatConfig = readNotificationConfig('wechat');
     if (wechatConfig?.webhookUrl) {
       notified = await sendAlertWechat(wechatConfig, simpleAlert) || notified;
+    }
+  }
+
+  if (rule.notify_pushplus) {
+    const pushplusConfig = readNotificationConfig('pushplus');
+    if (pushplusConfig?.token) {
+      notified = await sendAlertPushplus(pushplusConfig, simpleAlert) || notified;
     }
   }
 

@@ -15,6 +15,8 @@ import {
 } from 'chart.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { apiFetch } from '@/lib/client-api';
+import { getAppDateKey } from '@/lib/date-time';
 import { useChartTheme, buildTooltipOptions, buildLegendOptions, CHART_DEFAULTS } from '@/lib/chart-theme';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, Filler);
@@ -36,29 +38,25 @@ const RANGE_OPTIONS = [
   { label: '近30天', value: '30d' },
 ];
 
+function shiftDateKey(dateKey: string, days: number): string {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function getDateRange(range: string): { start: string; end: string } {
-  const now = new Date();
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const today = getAppDateKey(new Date());
   switch (range) {
     case 'today':
-      return { start: fmt(now), end: fmt(now) };
-    case 'yesterday': {
-      const y = new Date(now);
-      y.setDate(y.getDate() - 1);
-      return { start: fmt(y), end: fmt(y) };
-    }
-    case '7d': {
-      const s = new Date(now);
-      s.setDate(s.getDate() - 7);
-      return { start: fmt(s), end: fmt(now) };
-    }
-    case '30d': {
-      const s = new Date(now);
-      s.setDate(s.getDate() - 30);
-      return { start: fmt(s), end: fmt(now) };
-    }
+      return { start: today, end: today };
+    case 'yesterday':
+      return { start: shiftDateKey(today, -1), end: shiftDateKey(today, -1) };
+    case '7d':
+      return { start: shiftDateKey(today, -6), end: today };
+    case '30d':
+      return { start: shiftDateKey(today, -29), end: today };
     default:
-      return { start: fmt(now), end: fmt(now) };
+      return { start: today, end: today };
   }
 }
 
@@ -69,14 +67,20 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
   const [dataA, setDataA] = useState<CompareData | null>(null);
   const [dataB, setDataB] = useState<CompareData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchRange = useCallback(async (range: string): Promise<CompareData | null> => {
     const { start, end } = getDateRange(range);
     try {
-      const res = await fetch(`/api/dashboard/traffic-history?range=custom&start=${start}&end=${end}`);
-      if (!res.ok) return null;
-      const json = await res.json();
-      const points = json.data || json || [];
+      const points = await apiFetch<Array<{
+        timestamp: string;
+        downloadBps?: number;
+        uploadBps?: number;
+      }>>(
+        `/api/dashboard/traffic?range=custom&start=${start}&end=${end}`,
+        undefined,
+        '获取流量对比失败',
+      );
       return {
         labels: points.map((p: { timestamp: string }) => {
           const d = new Date(`${p.timestamp.replace(' ', 'T')}Z`);
@@ -92,9 +96,11 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
 
   const handleCompare = useCallback(async () => {
     setLoading(true);
+    setError('');
     const [a, b] = await Promise.all([fetchRange(rangeA), fetchRange(rangeB)]);
     setDataA(a);
     setDataB(b);
+    if (!a && !b) setError('流量对比加载失败');
     setLoading(false);
   }, [rangeA, rangeB, fetchRange]);
 
@@ -218,7 +224,7 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
             <Line data={chartData} options={options} />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-               已自动对比所选范围，修改选择会立即重算
+              {error || '已自动对比所选范围，修改选择会立即重算'}
             </div>
           )}
         </div>

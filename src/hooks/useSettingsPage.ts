@@ -5,6 +5,7 @@ import { formatSyncTime, maskSecret } from '@/lib/format';
 import { useCpeSettings } from '@/features/settings/hooks/useCpeSettings';
 import { useDataRetentionSettings } from '@/features/settings/hooks/useDataRetentionSettings';
 import { useDataQuotaSettings } from '@/features/settings/hooks/useDataQuotaSettings';
+import { useDailyReportSettings } from '@/features/settings/hooks/useDailyReportSettings';
 import { useNotificationSettings } from '@/features/settings/hooks/useNotificationSettings';
 import { useSmsSyncSettings } from '@/features/settings/hooks/useSmsSyncSettings';
 import { useDeviceInfoSyncSettings } from '@/features/settings/hooks/useDeviceInfoSyncSettings';
@@ -15,6 +16,7 @@ export type {
   CpeConfigForm,
   DataQuotaForm,
   DataRetentionForm,
+  DailyReportPushForm,
   DeviceInfoSyncConfigForm,
   EmailConfigForm,
   SettingsSectionId,
@@ -35,6 +37,7 @@ export function useSettingsPage() {
 
   const cpe = useCpeSettings(actionContext);
   const notifications = useNotificationSettings(actionContext);
+  const dailyReport = useDailyReportSettings(actionContext);
   const sms = useSmsSyncSettings(actionContext);
   const deviceInfoSync = useDeviceInfoSyncSettings(actionContext);
   const retention = useDataRetentionSettings(actionContext);
@@ -43,11 +46,16 @@ export function useSettingsPage() {
 
   const pageLoading = cpe.initialLoading
     || notifications.initialLoading
+    || dailyReport.initialLoading
     || sms.initialLoading
     || deviceInfoSync.initialLoading
     || retention.initialLoading
     || quota.initialLoading;
-  const loading = cpe.saving || notifications.savingEmail || notifications.savingWechat || notifications.savingPushplus;
+  const loading = cpe.saving
+    || notifications.savingEmail
+    || notifications.savingWechat
+    || notifications.savingPushplus
+    || dailyReport.savingDailyReportPush;
 
   const overviewMeta = useMemo(() => ({
     cpeConfigured: Boolean(cpe.cpeConfig.cpeUrl),
@@ -70,6 +78,7 @@ export function useSettingsPage() {
   return {
     ...cpe,
     ...notifications,
+    ...dailyReport,
     ...sms,
     ...deviceInfoSync,
     ...retention,

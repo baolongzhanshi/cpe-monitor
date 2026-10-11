@@ -1,5 +1,6 @@
 import {
   BellRing,
+  Clock,
   Database,
   DatabaseBackup,
   Gauge,
@@ -104,8 +105,15 @@ export function SettingsSidebar({
             href="#pushplus"
             icon={<Send className="h-3.5 w-3.5" />}
             label="PushPlus 推送"
-            detail="短信同步"
+            detail="告警/日报/短信"
             onClick={() => onOpenSection('pushplus')}
+          />
+          <SettingsNav
+            href="#report-push"
+            icon={<Clock className="h-3.5 w-3.5" />}
+            label="日报推送"
+            detail="每日定时"
+            onClick={() => onOpenSection('reportPush')}
           />
           <SettingsNav
             href="#data-backup"

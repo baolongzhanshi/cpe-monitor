@@ -29,6 +29,7 @@ export interface AlertRule {
   enabled: boolean;
   notifyEmail: boolean;
   notifyWechat: boolean;
+  notifyPushplus: boolean;
   cooldownMinutes: number;
   createdAt: Date | null;
 }

@@ -1,23 +1,24 @@
-import { jsonOk, requireSession, withApiHandler } from '@/lib/api-route';
+import { ApiError, jsonOk, requireSession, withApiHandler } from '@/lib/api-route';
 import { parseTimestampMs, toSqliteTimestamp } from '@/lib/date-time';
 import { findTrafficBefore, listTrafficBetween } from '@/lib/repositories/monitoring-repository';
 import { bitsPerSecondBetweenTimestamps, computeCounterDelta } from '@/lib/traffic-units';
-
-function getStartTime(range: string, now: Date): Date {
-  const duration = range === '1h' ? 60 * 60 * 1000
-    : range === '6h' ? 6 * 60 * 60 * 1000
-      : range === '7d' ? 7 * 24 * 60 * 60 * 1000
-        : range === '30d' ? 30 * 24 * 60 * 60 * 1000
-          : 24 * 60 * 60 * 1000;
-  return new Date(now.getTime() - duration);
-}
+import { resolveTrafficRange } from '@/lib/traffic-range';
 
 export const GET = withApiHandler(async (request) => {
   await requireSession();
-  const range = new URL(request.url).searchParams.get('range') || '24h';
+  const searchParams = new URL(request.url).searchParams;
+  const range = searchParams.get('range') || '24h';
   const now = new Date();
-  const startTimestamp = toSqliteTimestamp(getStartTime(range, now));
-  const endTimestamp = toSqliteTimestamp(now);
+  const resolvedRange = resolveTrafficRange(
+    range,
+    now,
+    searchParams.get('start'),
+    searchParams.get('end'),
+  );
+  if (!resolvedRange) throw new ApiError('流量范围参数无效', 400);
+
+  const startTimestamp = toSqliteTimestamp(resolvedRange.start);
+  const endTimestamp = toSqliteTimestamp(resolvedRange.end);
   let previousRow = findTrafficBefore(startTimestamp);
   const data = listTrafficBetween(startTimestamp, endTimestamp).map((row) => {
     const currentTime = parseTimestampMs(row.timestamp);

@@ -9,10 +9,11 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { initializeDatabase } from './db';
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from './report-generator';
-import { formatBytes } from './format';
-import { sendDailyReport } from './notifiers/email';
-import { sendDailyReportWechat } from './notifiers/wechat';
-import { getSettingsMap, readNotificationConfig } from './settings-store';
+import { deliverDailyReport } from './daily-report-delivery';
+import {
+  resolveDailyReportPushSettings,
+} from './daily-report-settings';
+import { getSettingsMap } from './settings-store';
 import { checkAlerts } from './alert-service';
 import { collectTrafficData } from './traffic-collection-service';
 import { APP_TIME_ZONE } from './date-time';
@@ -80,6 +81,26 @@ export function stopScheduler(): void {
   setTrafficSchedulerRunning(false);
 }
 
+export function syncDailyReportSchedule(): void {
+  if (tasks.dailyTask) {
+    tasks.dailyTask.stop();
+    tasks.dailyTask = null;
+  }
+
+  const settings = resolveDailyReportPushSettings(getSettingsMap());
+  if (!settings.enabled) return;
+
+  const [hour, minute] = settings.time.split(':').map(Number);
+  tasks.dailyTask = cron.schedule(
+    `${minute} ${hour} * * *`,
+    async () => {
+      console.log('Generating daily report...');
+      await generateAndSendDailyReport();
+    },
+    { timezone: APP_TIME_ZONE },
+  );
+}
+
 export async function startScheduler(): Promise<void> {
   initializeDatabase();
   const settingsMap = getSettingsMap();
@@ -111,15 +132,6 @@ export async function startScheduler(): Promise<void> {
     );
     setTrafficSchedulerRunning(true);
 
-    tasks.dailyTask = cron.schedule(
-      '0 22 * * *',
-      async () => {
-        console.log('Generating daily report...');
-        await generateAndSendDailyReport();
-      },
-      { timezone: APP_TIME_ZONE },
-    );
-
     // Weekly report: Sunday 22:30
     tasks.weeklyTask = cron.schedule(
       '30 22 * * 0',
@@ -144,6 +156,7 @@ export async function startScheduler(): Promise<void> {
     writeSystemLog('info', `调度器已启动，采集间隔 ${interval} 分钟`);
   }
 
+  syncDailyReportSchedule();
   await ensureSmsSchedulerStarted();
   await ensureDeviceInfoSchedulerStarted();
   await ensureRealtimeCollectorStarted();
@@ -163,6 +176,7 @@ export async function ensureSchedulerStarted(): Promise<void> {
     stopScheduler();
   }
 
+  syncDailyReportSchedule();
   await ensureSmsSchedulerStarted();
   await ensureDeviceInfoSchedulerStarted();
   await ensureRealtimeCollectorStarted();
@@ -174,21 +188,8 @@ async function generateAndSendDailyReport(): Promise<void> {
   try {
     const report = await generateDailyReport();
     upsertDailyReport(report);
-    const emailConfig = readNotificationConfig('email');
-    const wechatConfig = readNotificationConfig('wechat');
-    let sent = false;
-    if (emailConfig) sent = await sendDailyReport(emailConfig, report) || sent;
-    if (wechatConfig?.webhookUrl) {
-      sent = await sendDailyReportWechat(wechatConfig, {
-        date: report.reportDate,
-        totalDownload: formatBytes(report.totalDownload),
-        totalUpload: formatBytes(report.totalUpload),
-        deviceCount: report.topDevices?.length || 0,
-        networkQuality: report.networkQuality || '数据不足',
-        avgSignal: report.avgSignal || 0,
-      }) || sent;
-    }
-    if (sent) markDailyReportSent(report.reportDate);
+    const delivery = await deliverDailyReport(report);
+    if (delivery.sent) markDailyReportSent(report.reportDate);
 
     console.log('Daily report generated and stored');
     writeSystemLog('info', `日报生成完成: ${report.reportDate}`);

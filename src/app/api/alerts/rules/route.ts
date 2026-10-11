@@ -24,6 +24,7 @@ interface AlertRuleWriteBody {
   enabled: boolean;
   notifyEmail: boolean;
   notifyWechat: boolean;
+  notifyPushplus?: boolean;
   cooldownMinutes?: number;
 }
 
@@ -37,7 +38,12 @@ function validateRuleBody(body: AlertRuleWriteBody): AlertRuleWriteInput {
   if (!Number.isInteger(cooldownMinutes) || cooldownMinutes < 1 || cooldownMinutes > 10080) {
     throw new ApiError('冷却时间必须是 1 到 10080 之间的整数分钟', 400);
   }
-  return { ...body, name, cooldownMinutes };
+  return {
+    ...body,
+    name,
+    notifyPushplus: body.notifyPushplus === true,
+    cooldownMinutes,
+  };
 }
 
 export const GET = withApiHandler(async () => {
