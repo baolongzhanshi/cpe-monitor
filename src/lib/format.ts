@@ -54,13 +54,8 @@ export function formatBytesFromString(bytesStr: string | undefined, inKB = false
   return formatBytes(bytes);
 }
 
-export function getSignalQuality(strength: number): { label: string; variant: 'success' | 'info' | 'warning' | 'danger' } | null {
-  if (strength === 0) return null;
-  if (strength >= -70) return { label: '优秀', variant: 'success' };
-  if (strength >= -85) return { label: '良好', variant: 'info' };
-  if (strength >= -100) return { label: '一般', variant: 'warning' };
-  return { label: '差', variant: 'danger' };
-}
+export { getSignalQuality } from './signal-quality';
+export type { SignalQuality, SignalQualityVariant } from './signal-quality';
 
 export function getCarrier(mcc: string): string {
   const carriers: Record<string, string> = {

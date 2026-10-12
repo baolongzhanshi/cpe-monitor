@@ -27,7 +27,7 @@ internal static class NativeSmokeTest
                 if (!reportCsv.Contains(reportDate, StringComparison.Ordinal) || reportCsv.Split('\n').Length < 2) throw new InvalidOperationException("报告 CSV 未包含生成的数据。");
             }).GetAwaiter().GetResult();
             using var form = new ModernMainForm(); form.CreateControl();
-            File.WriteAllText(reportPath, JsonSerializer.Serialize(new { success = true, version = "0.3.15", nativeUi = true, embeddedWebUi = true, desktopMode = true, isolatedData = true })); return 0;
+            File.WriteAllText(reportPath, JsonSerializer.Serialize(new { success = true, version = typeof(NativeSmokeTest).Assembly.GetName().Version?.ToString(3) ?? "unknown", nativeUi = true, embeddedWebUi = true, desktopMode = true, isolatedData = true })); return 0;
         }
         catch (Exception error) { File.WriteAllText(reportPath, JsonSerializer.Serialize(new { success = false, error = error.Message })); return 1; }
     }

@@ -100,7 +100,7 @@ export function TopNav({ alertUnreadCount = 0, onAlertBellClick, connectionStatu
 
         <div className="flex items-center gap-1.5">
           <Link
-            href="/alerts/history"
+            href="/alerts/logs"
             onClick={onAlertBellClick}
             className="relative inline-flex size-10 items-center justify-center rounded-2xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="告警通知"

@@ -5,6 +5,7 @@ import { Activity, RadioTower } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AnimatedCounter } from '@/components/motion';
+import { RSRP_QUALITY_THRESHOLDS } from '@/lib/signal-quality';
 
 interface SignalMetricsOverviewProps {
   cell?: Record<string, unknown> | null;
@@ -24,7 +25,8 @@ const metrics: SignalMetric[] = [
     label: 'RSRP',
     unit: 'dBm',
     description: '5G/LTE 参考信号接收功率',
-    thresholds: [-80, -90, -100],
+    // 与仪表盘徽章、采集报告共用同一套分档，避免同一数值在不同界面结论相反。
+    thresholds: RSRP_QUALITY_THRESHOLDS,
   },
   {
     key: 'rsrq',

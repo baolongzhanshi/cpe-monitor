@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, initializeDatabase } from '@/lib/db';
+import { jsonError, isSessionOrLocalRequest } from '@/lib/api-route';
 import { sanitizeProcesses } from '@/lib/resource-sample-payload';
 
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,10 @@ function round(value: number): number {
 
 /** 灰度版宿主每隔一分钟上报一条整棵进程树的资源快照。 */
 export async function POST(request: Request): Promise<NextResponse> {
+  // 宿主无凭据，靠本机回环来源通过校验；其它来源必须已登录，否则任何人都能伪造采样数据。
+  if (!(await isSessionOrLocalRequest(request))) {
+    return jsonError('未登录', 401);
+  }
   initializeDatabase();
   let body: SamplePayload;
   try {
@@ -98,6 +103,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
 /** 读取最近的样本并给出汇总，供报表使用。 */
 export async function GET(request: Request): Promise<NextResponse> {
+  if (!(await isSessionOrLocalRequest(request))) {
+    return jsonError('未登录', 401);
+  }
   initializeDatabase();
   const url = new URL(request.url);
   const requested = Number(url.searchParams.get('limit') ?? 200);

@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { formatBytes, formatLocalTime } from '@/lib/format';
+import { getSignalQuality } from '@/lib/signal-quality';
 
 export interface CollectionReportData {
   success: boolean;
@@ -73,10 +74,14 @@ function SignalMeter({ value }: { value: number }) {
 }
 
 function SignalQualityText({ value }: { value: number }) {
-  if (value >= -70) return <span className="text-success">优秀</span>;
-  if (value >= -85) return <span className="text-success">良好</span>;
-  if (value >= -100) return <span className="text-warning">一般</span>;
-  return <span className="text-destructive">差</span>;
+  const quality = getSignalQuality(value);
+  if (!quality) return <span className="text-muted-foreground">—</span>;
+  const tone = quality.variant === 'danger'
+    ? 'text-destructive'
+    : quality.variant === 'warning'
+      ? 'text-warning'
+      : 'text-success';
+  return <span className={tone}>{quality.label}</span>;
 }
 
 function MiniTrafficBar({ value, max, label }: { value: number; max: number; label: string }) {

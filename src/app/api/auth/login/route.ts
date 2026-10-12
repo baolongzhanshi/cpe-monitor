@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { verifyAdminPassword, createToken } from '@/lib/auth';
+import { verifyAdminPassword, createToken, sessionCookieOptions } from '@/lib/auth';
 import { ApiError, jsonOk, parseJsonBody, withApiHandler } from '@/lib/api-route';
 import fs from 'node:fs';
 
@@ -14,13 +14,7 @@ export const POST = withApiHandler(async (request) => {
 
   const token = await createToken({ userId: 1, username: 'admin' });
   const cookieStore = await cookies();
-  cookieStore.set('token', token, {
-    httpOnly: true,
-    secure: process.env.SECURE_COOKIE === 'true',
-    sameSite: 'lax',
-    maxAge: 60 * 60 * 24,
-    path: '/',
-  });
+  cookieStore.set('token', token, sessionCookieOptions());
   const firstRunPath = process.env.CPE_FIRST_RUN_PASSWORD_FILE?.trim();
   if (firstRunPath) {
     try { fs.rmSync(firstRunPath, { force: true }); } catch { /* 密码提示文件清理失败不影响登录 */ }

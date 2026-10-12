@@ -47,8 +47,14 @@ export default function AlertLogsPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await apiFetch<AlertLogWithRuleName[]>('/api/alerts/logs', undefined, '获取告警日志失败');
-      setLogs(Array.isArray(data) ? data : []);
+      // 接口返回的是分页对象 { logs, total, page, pageSize }，不是数组。
+      // 这里取最近 100 条用于本页的统计与筛选；接口的 pageSize 上限就是 100。
+      const data = await apiFetch<{ logs?: AlertLogWithRuleName[] }>(
+        '/api/alerts/logs?page=1&pageSize=100',
+        undefined,
+        '获取告警日志失败',
+      );
+      setLogs(Array.isArray(data?.logs) ? data.logs : []);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : '获取告警日志失败');
     } finally {

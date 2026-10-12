@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, initializeDatabase } from '@/lib/db';
+import { jsonError, isSessionOrLocalRequest } from '@/lib/api-route';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,12 @@ function countOf(sql: string): number {
  * 只包含版本类信息、表计数和最近日志；不含短信正文、设备密码、
  * PushPlus Token 与运行密钥，遇到疑似凭据的日志行直接替换。
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<NextResponse> {
+  // 宿主托盘菜单会无凭据调用本接口导出诊断；它靠本机回环来源通过校验，
+  // 其它来源（例如把服务暴露到局域网的部署）仍必须已登录。
+  if (!(await isSessionOrLocalRequest(request))) {
+    return jsonError('未登录', 401);
+  }
   initializeDatabase();
 
   let schemaVersion = -1;

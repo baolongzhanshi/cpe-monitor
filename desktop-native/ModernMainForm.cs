@@ -108,7 +108,8 @@ internal sealed class ModernMainForm : Form
             if (_configureBrowser is not null) await _configureBrowser(core);
             if (_disposed) return;
             core.NavigationCompleted += async (_, _) => await UpdateVisibilityAsync();
-            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard?desktopVersion=0.3.15");
+            // 不再附加 desktopVersion 查询参数：前端从未读取它，写着反而会随版本号过期。
+            core.Navigate($"http://127.0.0.1:{ServerHost.Port}/dashboard");
             _initialized = true;
             _loading.Visible = false;
             _webView.Visible = true;

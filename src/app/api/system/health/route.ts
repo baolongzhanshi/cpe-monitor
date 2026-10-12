@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ensureSchedulerStarted } from '@/lib/scheduler';
+import { APP_VERSION } from '@/lib/app-version';
 import { getRealtimeCollectorStatus } from '@/lib/realtime-collector';
 
 export async function GET() {
@@ -8,7 +9,7 @@ export async function GET() {
   return NextResponse.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: '1.0.0',
+    version: APP_VERSION,
     realtime: getRealtimeCollectorStatus(),
   });
 }

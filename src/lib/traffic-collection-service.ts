@@ -74,7 +74,28 @@ export interface TrafficCollectionResult {
   error?: string;
 }
 
-export async function collectTrafficData(
+let pendingCollection: Promise<TrafficCollectionResult> | null = null;
+
+/**
+ * 采集入口，同一时刻只允许一次在途采集。
+ *
+ * 采集要串行走完登录、信号、HostInfo、流量统计，CPE 响应慢时可能超过采集周期，
+ * 而 node-cron 默认允许上一轮没结束时再起一轮。两个实例会各自读到同一行"上一次流量"，
+ * 把同一段增量各记一遍，日报与套餐用量随之虚高；手动采集与定时采集重合时同样。
+ * 在途期间再次调用会复用同一次采集的结果，而不是排队再跑一遍。
+ */
+export function collectTrafficData(
+  source: 'scheduler' | 'manual' = 'scheduler',
+): Promise<TrafficCollectionResult> {
+  if (!pendingCollection) {
+    pendingCollection = runTrafficCollection(source).finally(() => {
+      pendingCollection = null;
+    });
+  }
+  return pendingCollection;
+}
+
+async function runTrafficCollection(
   source: 'scheduler' | 'manual' = 'scheduler',
 ): Promise<TrafficCollectionResult> {
   let collectionId: number | null = null;

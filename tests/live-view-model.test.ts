@@ -124,6 +124,34 @@ test('刚恢复可见时旧样本不立即判为过期，但一直等不到数�
   assert.equal(readLiveFreshness({ ...common, watchingSinceMs: now - 60_000 }), 'stale');
 });
 
+test('数据每秒正常到达时必须一直是 current，时钟不推进则会误报过期', () => {
+  // 模拟一次正常会话：每秒来一个新样本，判定时钟同步推进。
+  const start = 1_000_000_000_000;
+  for (let second = 0; second <= 30; second += 1) {
+    const tick = start + second * 1_000;
+    assert.equal(readLiveFreshness({
+      collectedAt: new Date(tick),
+      stale: false,
+      pageVisible: true,
+      watchingSinceMs: start,
+      now: tick,
+    }), 'current', `第 ${second} 秒应当判为实时`);
+  }
+
+  // 反向用例：时钟停在挂载时刻不再推进（曾经的 bug）。
+  // 此时 ageMs 变成负数并逐秒远离零点，约 5 秒后越过容差被判为过期。
+  // 这条用例是为了钉住"传入的 now 必须跟着时间走"这个前提。
+  const mountedAt = start;
+  const frozenVerdicts = [0, 1, 3, 4, 5, 10].map((second) => readLiveFreshness({
+    collectedAt: new Date(mountedAt + second * 1_000),
+    stale: false,
+    pageVisible: true,
+    watchingSinceMs: mountedAt,
+    now: mountedAt,
+  }));
+  assert.deepEqual(frozenVerdicts, ['current', 'current', 'current', 'current', 'current', 'stale']);
+});
+
 test('合并历史与实时序列时末尾只追加当前速率一个点，且不篡改原历史', () => {
   const history = [
     { timestamp: '2026-10-07 16:00:00', downloadBps: 1000 },

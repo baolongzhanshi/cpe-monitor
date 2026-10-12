@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LIVE_STALE_AFTER_MS, readLiveFreshness, type LiveFreshnessState } from '@/lib/live-view-model';
+import { readLiveFreshness, type LiveFreshnessState } from '@/lib/live-view-model';
 import { usePageVisibility } from '@/hooks/usePageVisibility';
 
 /**
@@ -28,15 +28,19 @@ export function useLiveFreshness(collectedAt: Date | null, stale: boolean): Live
     };
   }, []);
 
+  // 每秒推进一次时钟。
+  //
+  // 判定必须在渲染时读到当前时间，而 React 要求渲染是纯的、不允许在渲染期调用 Date.now()，
+  // 所以由这个定时器把时间推进到 state，渲染只读 state。页面不可见时不推进，避免后台空转。
+  //
+  // 这里曾经用"只在失效边界醒一次"的写法：数据每秒到来会让 effect 每秒重跑并重排定时器，
+  // 定时器因此永不触发，state 里的时间停在挂载时刻，ageMs 每秒负增长，
+  // 约 5 秒后越过容差被判为过期且再也回不来——仪表盘与设备页都会中招。
   useEffect(() => {
-    if (!pageVisible || !collectedAt) return;
-    // 只在数据即将失效的边界醒一次，避免常驻每秒重渲染；
-    // 正常情况下父组件会随新数据更新，这个定时器只在断流时兜底。
-    const anchoredAt = Math.max(collectedAt.getTime(), watchingSinceMs);
-    const delay = Math.max(250, LIVE_STALE_AFTER_MS - (Date.now() - anchoredAt) + 100);
-    const timer = window.setTimeout(() => setNow(Date.now()), delay);
-    return () => window.clearTimeout(timer);
-  }, [pageVisible, collectedAt, watchingSinceMs, now]);
+    if (!pageVisible) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [pageVisible]);
 
   return readLiveFreshness({
     collectedAt,

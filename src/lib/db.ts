@@ -29,7 +29,14 @@ let databaseInstance: SqliteDatabase | null = null;
 let databaseInitialized = false;
 let databaseInitializing = false;
 
-function getDatabasePath(): string {
+/**
+ * 运行数据库文件的绝对路径。
+ *
+ * 桌面宿主通过 `CPE_DATABASE_PATH` 把它指向 %APPDATA%，所以任何需要直接触碰
+ * 数据库文件的代码（备份、恢复）都必须走这里，不能自己拼 `process.cwd()`——
+ * Next standalone 启动时 chdir 到 resources\server，那里根本没有 data 目录。
+ */
+export function getDatabasePath(): string {
   return process.env.CPE_DATABASE_PATH
     ? path.resolve(process.env.CPE_DATABASE_PATH)
     : path.join(process.cwd(), 'data', 'cpe-monitor.db');
@@ -48,6 +55,24 @@ export function getDb(): SqliteDatabase {
   databaseInstance.pragma('journal_mode = WAL');
   databaseInstance.pragma('foreign_keys = ON');
   return databaseInstance;
+}
+
+/**
+ * 关闭当前连接并清空单例，下一次 getDb() 会重新打开。
+ *
+ * 恢复数据库时必须先调用：直接在连接存活时覆盖主库文件、再删掉它的 WAL/SHM，
+ * 会让连接的分页缓存与新文件内容不再一致，而且恢复的数据在重启前根本不可见。
+ */
+export function closeDatabase(): void {
+  if (databaseInstance) {
+    try {
+      databaseInstance.close();
+    } catch {
+      // 连接可能已经失效，这里只负责让它不再被复用。
+    }
+    databaseInstance = null;
+  }
+  databaseInitialized = false;
 }
 
 /** Lazy proxy retained for compatibility while repositories are introduced. */

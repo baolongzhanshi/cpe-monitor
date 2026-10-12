@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
+import { isLocalDesktopRequest } from '@/lib/desktop-auth';
 import { initializeDatabase } from '@/lib/db';
 
 export class ApiError extends Error {
@@ -22,6 +23,18 @@ export async function requireSession() {
     throw new ApiError('未登录', 401);
   }
   return session;
+}
+
+/**
+ * 宿主进程不带会话 cookie，它靠"本机回环来源"通过校验；其它来源仍然必须已登录。
+ *
+ * 用于既服务于宿主、又可能被浏览器访问的接口（诊断导出、资源采样上报）。
+ * 这些接口原先完全没有校验——桌面版下只监听回环所以看不出问题，
+ * 但一旦按 README 用 Docker 或 npm start 部署，它们就是匿名可写的入口。
+ */
+export async function isSessionOrLocalRequest(request: Request): Promise<boolean> {
+  if (isLocalDesktopRequest(request.headers)) return true;
+  return (await getSession()) !== null;
 }
 
 export function jsonError(message: string, status = 500, cause?: unknown) {

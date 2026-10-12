@@ -35,7 +35,7 @@ const COMMANDS: CommandItem[] = [
   { label: '告警', href: '/alerts', icon: <Bell className="h-4 w-4" />, shortcut: '4', keywords: 'alert warning' },
   { label: '报告', href: '/reports', icon: <FileText className="h-4 w-4" />, shortcut: '5', keywords: 'report daily weekly' },
   { label: '设置', href: '/settings', icon: <Settings className="h-4 w-4" />, shortcut: '6', keywords: 'settings config' },
-  { label: '告警历史', href: '/alerts/history', icon: <Bell className="h-4 w-4" />, keywords: 'alert history log' },
+  { label: '告警历史', href: '/alerts/logs', icon: <Bell className="h-4 w-4" />, keywords: 'alert history log' },
   { label: '系统日志', href: '/settings/logs', icon: <FileText className="h-4 w-4" />, keywords: 'system log' },
 ];
 

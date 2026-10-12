@@ -49,5 +49,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: CPEMonitor-Windows-installer
-          path: installers/CPEMonitor_0.3.0_x64-setup.exe
+          # 不要写死版本号：构建产物按 package.json 的版本命名，写死会在每次升版本后匹配不到。
+          path: installers/CPEMonitor_*_x64-setup.exe
           if-no-files-found: error

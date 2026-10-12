@@ -438,9 +438,9 @@ export default function SmsPage() {
           <motion.div className="mt-5 grid gap-3" layout={reduce ? undefined : true}>
             <AnimatePresence mode="popLayout" initial={false}>
               {visibleMessages.map((message, index) => (
-                <SwipeableItem key={`${message.id}-${index}`} onCopy={() => { void navigator.clipboard?.writeText(message.content || ''); }}>
+                <SwipeableItem key={message.id} onCopy={() => { void navigator.clipboard?.writeText(message.content || ''); }}>
                 <motion.article
-                  key={`${message.id}-${index}`}
+                  key={message.id}
                   layout={reduce ? undefined : 'position'}
                   initial={reduce ? undefined : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}

@@ -51,6 +51,22 @@ export async function createToken(payload: { userId: number; username: string })
     .sign(JWT_SECRET);
 }
 
+/**
+ * 会话 cookie 的统一选项，登录与退出必须共用。
+ *
+ * 退出时若把 Secure 判据换成 NODE_ENV，在 HTTP 部署下浏览器会忽略带 Secure 的删除指令，
+ * cookie 留着、会话实际仍然有效，用户以为已经退出。
+ */
+export function sessionCookieOptions(maxAgeSeconds = 60 * 60 * 24) {
+  return {
+    httpOnly: true,
+    secure: process.env.SECURE_COOKIE === 'true',
+    sameSite: 'lax' as const,
+    maxAge: maxAgeSeconds,
+    path: '/',
+  };
+}
+
 export async function verifyToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, JWT_SECRET);

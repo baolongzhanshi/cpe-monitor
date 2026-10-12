@@ -128,7 +128,9 @@ export async function startScheduler(): Promise<void> {
         await collectTrafficData();
         await checkAlerts();
       },
-      { timezone: APP_TIME_ZONE },
+      // noOverlap：上一轮还没结束时不再起一轮。node-cron 默认允许重叠，
+      // 而一次采集可能超过采集周期，重叠会把同一段流量增量重复计入。
+      { timezone: APP_TIME_ZONE, noOverlap: true },
     );
     setTrafficSchedulerRunning(true);
 
@@ -186,7 +188,8 @@ export async function ensureSchedulerStarted(): Promise<void> {
 
 async function generateAndSendDailyReport(): Promise<void> {
   try {
-    const report = await generateDailyReport();
+    // 统计前一个完整自然日。统计当天的话，推送时刻之后的流量不会出现在任何一份日报里。
+    const report = await generateDailyReport({ day: new Date(Date.now() - 24 * 60 * 60 * 1000) });
     upsertDailyReport(report);
     const delivery = await deliverDailyReport(report);
     if (delivery.sent) markDailyReportSent(report.reportDate);

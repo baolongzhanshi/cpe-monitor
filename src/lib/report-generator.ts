@@ -1,6 +1,7 @@
 import { db } from './db';
 import type { DailyReport, DeviceRanking } from '@/types';
 import {
+  getAppDateKey,
   getAppDayRange,
   getAppHour,
   toSqliteTimestamp,
@@ -151,11 +152,21 @@ function computeNetworkQuality(
   return '差';
 }
 
-export async function generateDailyReport(): Promise<DailyReport> {
+/**
+ * 生成日报。
+ *
+ * day 指定统计哪一天，默认当天——手动"生成今日预览"走这个口径，统计到此刻为止。
+ * 定时推送必须传入前一个完整自然日：若统计当天，推送时刻之后的流量不会出现在任何日报里，
+ * 例如默认 22:00 推送，每天 22:00 到 24:00 的数据就被永久漏掉。
+ */
+export async function generateDailyReport(options: { day?: Date } = {}): Promise<DailyReport> {
   const now = new Date();
-  const { dateKey: todayStr, start: today, end: tomorrow } = getAppDayRange(now);
+  const day = options.day ?? now;
+  const { dateKey: todayStr, start: today, end: tomorrow } = getAppDayRange(day);
   const todayIso = toSqliteTimestamp(today);
   const tomorrowIso = toSqliteTimestamp(tomorrow);
+  // 统计已经结束的一天时按整天算期望采样数，否则只统计到此刻。
+  const dayIsComplete = tomorrow.getTime() <= now.getTime();
 
   const todayTraffic = db.prepare(
     `SELECT
@@ -187,10 +198,9 @@ export async function generateDailyReport(): Promise<DailyReport> {
     "SELECT value FROM system_settings WHERE key = 'scheduler_interval'",
   ).get() as { value?: string } | undefined;
   const intervalMinutes = Math.max(1, Number(intervalSetting?.value || 60));
-  const elapsedMinutes = Math.min(
-    24 * 60,
-    Math.max(0, Math.ceil((now.getTime() - today.getTime()) / 60_000)),
-  );
+  const elapsedMinutes = dayIsComplete
+    ? 24 * 60
+    : Math.min(24 * 60, Math.max(0, Math.ceil((now.getTime() - today.getTime()) / 60_000)));
   const expectedSamples = Math.max(1, Math.ceil(elapsedMinutes / intervalMinutes));
   const samplingRatio = expectedSamples > 0
     ? Math.min(1, todayTraffic.length / expectedSamples)
@@ -279,26 +289,44 @@ export interface PeriodReport {
   generatedAt: string;
 }
 
+/** 按 ISO 8601 计算周序号，跨年那一周不会得到 W53 这种无效编号。 */
+function isoWeekKey(dateKey: string): string {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  const dayNum = (date.getUTCDay() + 6) % 7; // 周一为 0
+  const thursday = new Date(date.getTime() + (3 - dayNum) * 86400000);
+  const jan4 = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 4));
+  const firstThursday = new Date(jan4.getTime() + (3 - ((jan4.getUTCDay() + 6) % 7)) * 86400000);
+  const week = 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * 86400000));
+  return `${thursday.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+/**
+ * 周报与月报的窗口同样按上海自然日计算。
+ *
+ * 这里原先用机器本地时区（getDay/setDate/setHours），而日报硬编码 +08:00，
+ * 机器时区不是 Asia/Shanghai 时两类报告对"同一天"的定义就会互相打架。
+ */
 function getWeekRange(now: Date): { start: Date; end: Date; key: string } {
-  const day = now.getDay(); // 0=Sun
-  const diffToMonday = day === 0 ? 6 : day - 1;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - diffToMonday);
-  monday.setHours(0, 0, 0, 0);
-  const nextMonday = new Date(monday);
-  nextMonday.setDate(monday.getDate() + 7);
-  // ISO week number
-  const jan1 = new Date(monday.getFullYear(), 0, 1);
-  const weekNum = Math.ceil(((monday.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7);
-  const key = `${monday.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
-  return { start: monday, end: nextMonday, key };
+  const dateKey = getAppDateKey(now);
+  const anchor = new Date(`${dateKey}T00:00:00Z`);
+  const diffToMonday = (anchor.getUTCDay() + 6) % 7; // 周一为 0
+  const mondayKey = new Date(anchor.getTime() - diffToMonday * 86400000).toISOString().slice(0, 10);
+  const start = new Date(`${mondayKey}T00:00:00+08:00`);
+  const end = new Date(start.getTime() + 7 * 86400000);
+  return { start, end, key: isoWeekKey(mondayKey) };
 }
 
 function getMonthRange(now: Date): { start: Date; end: Date; key: string } {
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return { start, end, key };
+  const monthKey = getAppDateKey(now).slice(0, 7); // YYYY-MM
+  const [year, month] = monthKey.split('-').map(Number);
+  const nextMonthKey = month === 12
+    ? `${year + 1}-01`
+    : `${year}-${String(month + 1).padStart(2, '0')}`;
+  return {
+    start: new Date(`${monthKey}-01T00:00:00+08:00`),
+    end: new Date(`${nextMonthKey}-01T00:00:00+08:00`),
+    key: monthKey,
+  };
 }
 
 function generatePeriodReport(periodType: 'weekly' | 'monthly', range: { start: Date; end: Date; key: string }): PeriodReport {

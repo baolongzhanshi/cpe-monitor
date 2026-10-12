@@ -8,6 +8,7 @@ import StatusBadge from './components/StatusBadge';
 import InfoTable from './components/InfoTable';
 import DeviceTable, { type DeviceTableItem } from './components/DeviceTable';
 import { formatBytes } from '@/lib/format';
+import { getSignalQuality } from '@/lib/signal-quality';
 
 export interface CollectionReportEmailData {
   success: boolean;
@@ -72,12 +73,9 @@ function formatMetric(value: number | null | undefined, unit: string): string {
   return `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`;
 }
 
-function getSignalQuality(rsrp: number | null | undefined): string {
+function getSignalQualityText(rsrp: number | null | undefined): string {
   if (rsrp === null || rsrp === undefined) return '暂无评级';
-  if (rsrp >= -80) return '优秀';
-  if (rsrp >= -95) return '良好';
-  if (rsrp >= -105) return '一般';
-  return '较差';
+  return getSignalQuality(rsrp)?.label ?? '暂无评级';
 }
 
 export default function CollectionReportEmail({ data }: CollectionReportEmailProps) {
@@ -176,7 +174,7 @@ export default function CollectionReportEmail({ data }: CollectionReportEmailPro
             <SectionHeading
               title="蜂窝网络快照"
               description="网络制式、小区与射频指标来自本次采集。"
-              trailing={<StatusBadge tone={getSignalQuality(data.signal?.rsrp) === '较差' ? 'danger' : 'info'}>{getSignalQuality(data.signal?.rsrp)}</StatusBadge>}
+              trailing={<StatusBadge tone={getSignalQualityText(data.signal?.rsrp) === '较差' ? 'danger' : 'info'}>{getSignalQualityText(data.signal?.rsrp)}</StatusBadge>}
             />
             <table role="presentation" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <tbody>
