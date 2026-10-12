@@ -298,7 +298,25 @@ async function dispatchAlertNotifications(
 
 // ─── Main Alert Check ───────────────────────────────────────────────────
 
-export async function checkAlerts(): Promise<number> {
+let pendingCheck: Promise<number> | null = null;
+
+/**
+ * 告警检查入口，同一时刻只允许一次在途检查。
+ *
+ * 冷却判断与插入 alert_logs 之间隔着投递通知的 await，两个并发实例会各自
+ * 在 isInCooldown 返回 false 之后插日志并各发一轮通知，收到重复告警。
+ * 定时采集与手动采集重合时就会走到这种情况。在途期间复用同一次检查的结果。
+ */
+export function checkAlerts(): Promise<number> {
+  if (!pendingCheck) {
+    pendingCheck = runCheckAlerts().finally(() => {
+      pendingCheck = null;
+    });
+  }
+  return pendingCheck;
+}
+
+async function runCheckAlerts(): Promise<number> {
   let triggeredCount = 0;
   try {
     const rules = db.prepare('SELECT * FROM alert_rules WHERE enabled = 1').all() as AlertRuleRow[];

@@ -12,6 +12,7 @@ import {
 } from '@/components/overview/OverviewMiniCharts';
 import { LoadingBlock } from '@/components/LoadingBlock';
 import { SettingsSidebar } from '@/components/settings/SettingsSidebar';
+import { SaveOutcomeProvider } from '@/components/settings/save-outcome-context';
 import { CpeConnectionSection } from '@/components/settings/CpeConnectionSection';
 import { SmsSyncSection } from '@/components/settings/SmsSyncSection';
 import { DeviceInfoSyncSection } from '@/components/settings/DeviceInfoSyncSection';
@@ -144,13 +145,16 @@ export default function SettingsPage() {
         />
 
         <div className="space-y-4">
+          {/* 保存成败广播给子树里的所有保存按钮：各保存函数失败时同样会把 saving 置回 false，
+              按钮只凭这个下降沿分不清成败，会误闪「已保存」。 */}
+          <SaveOutcomeProvider failed={settings.message.type === 'error'}>
           <ThemeColorSection />
           <CpeConnectionSection
             open={settings.openSection === 'connection'}
             onOpenChange={(open) => settings.setOpenSection(open ? 'connection' : null)}
             cpeConfig={settings.cpeConfig}
             setCpeConfig={settings.setCpeConfig}
-            loading={settings.loading}
+            loading={settings.saving}
             testing={settings.testing}
             testResult={settings.testResult}
             onSave={() => { void settings.saveCpeConfig(); }}
@@ -200,7 +204,7 @@ export default function SettingsPage() {
             emailConfigured={settings.emailConfigured}
             passwordConfigured={settings.emailPasswordSet}
             recipientCount={settings.recipientCount}
-            loading={settings.loading}
+            loading={settings.savingEmail}
             onSave={() => { void settings.saveEmailConfig(); }}
           />
           <WechatNotificationSection
@@ -209,7 +213,7 @@ export default function SettingsPage() {
             wechatConfig={settings.wechatConfig}
             setWechatConfig={settings.setWechatConfig}
             wechatConfigured={settings.wechatConfigured}
-            loading={settings.loading}
+            loading={settings.savingWechat}
             onSave={() => { void settings.saveWechatConfig(); }}
           />
           <PushplusNotificationSection
@@ -232,6 +236,7 @@ export default function SettingsPage() {
             onSave={() => { void settings.saveDailyReportPush(); }}
           />
           <DataBackupSection />
+          </SaveOutcomeProvider>
         </div>
       </div>
     </PageShell>

@@ -2,7 +2,7 @@
 
 H153 CPE 流量监控、告警通知、每日报告系统。
 
-接手开发请先阅读 [AI 项目交接文档](docs/AI_HANDOFF.md) 和 [交付状态](docs/DELIVERY_STATUS.md)，其中列出功能、核心文件、备份规则、验证范围与已知限制。
+接手开发请先阅读 [AI 项目交接文档](docs/AI_HANDOFF.md) 与 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md)，其中列出功能、核心文件、备份规则、验证范围与已知限制。`docs/DELIVERY_STATUS.md` 是 0.3.2 的历史快照，仅供参考，不要据它判断当前交付状态。
 
 ## 功能特性
 

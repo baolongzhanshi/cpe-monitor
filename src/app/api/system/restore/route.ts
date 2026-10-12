@@ -41,6 +41,9 @@ export const POST = withApiHandler(async (request) => {
 
   // 必须先断开连接再动文件。连接存活时覆盖主库、再删掉它的 WAL/SHM，
   // 会让连接的分页缓存与新文件内容不一致，而且恢复的数据在进程重启前根本不可见。
+  //
+  // 从下面这行到校验结束必须是纯同步的：Node 只有一个 JS 线程，同步块内不会有别的
+  // 请求或定时器插进来调用 getDb() 把连接提前重开。一旦中间引入 await，这个前提就没了。
   const hadExisting = fs.existsSync(dbPath);
   closeDatabase();
   if (hadExisting) {

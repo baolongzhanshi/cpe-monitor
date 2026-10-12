@@ -374,7 +374,16 @@ function generatePeriodReport(periodType: 'weekly' | 'monthly', range: { start: 
   const avgSignal = average(trafficRows.map((r) => r.signal_strength));
   const avgRsrp = average(trafficRows.map((r) => r.rsrp));
   const qualitySignal = avgRsrp ?? avgSignal;
-  const networkQuality = computeNetworkQuality(trafficRows.length, qualitySignal, dayCount > 0 ? 0.7 : 0);
+  // 采样完整度与日报用同一口径：实际行数 ÷ 期望行数。
+  // 这里原先写的是 `dayCount > 0 ? 0.7 : 0`，而 dayCount 已被 Math.max(1, …) 夹到 ≥1，
+  // 那个 0 分支不可达，等于恒定传 0.7——评级完全不反映周期内实际采样是否完整。
+  const intervalSetting = db.prepare(
+    "SELECT value FROM system_settings WHERE key = 'scheduler_interval'",
+  ).get() as { value?: string } | undefined;
+  const periodIntervalMinutes = Math.max(1, Number(intervalSetting?.value || 60));
+  const expectedPeriodSamples = Math.max(1, dayCount * Math.ceil((24 * 60) / periodIntervalMinutes));
+  const periodSamplingRatio = Math.min(1, trafficRows.length / expectedPeriodSamples);
+  const networkQuality = computeNetworkQuality(trafficRows.length, qualitySignal, periodSamplingRatio);
 
   return {
     periodType,

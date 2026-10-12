@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -62,6 +62,12 @@ export function TrafficChart({ data }: TrafficChartProps) {
 
   // 数据实际时间范围：既决定刻度格式，也用来收掉横轴两侧的空白。
   const extent = useMemo(() => getTimeAxisExtent(data), [data]);
+
+  // 用户是否手动缩放或平移过。只置真、不再复位：手动调整后横轴归用户控制，
+  // 直到组件重新挂载（例如离开页面再回来）。回调若因插件版本差异没触发，
+  // userAdjusted 始终为假，行为与改动前完全一致。
+  const [userAdjusted, setUserAdjusted] = useState(false);
+  const markUserAdjusted = useCallback(() => setUserAdjusted(true), []);
 
   const chartData = useMemo(
     () => {
@@ -143,6 +149,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
           pan: {
             enabled: true,
             mode: 'x' as const,
+            onPanComplete: markUserAdjusted,
           },
           zoom: {
             drag: {
@@ -150,14 +157,18 @@ export function TrafficChart({ data }: TrafficChartProps) {
               backgroundColor: `color-mix(in oklch, ${themeColors.primary} 15%, transparent)`,
             },
             mode: 'x' as const,
+            onZoomComplete: markUserAdjusted,
           },
         },
       },
       scales: {
         x: {
           type: 'linear' as const,
-          min: extent.min,
-          max: extent.max,
+          // 用户缩放或平移之后就不再写 min/max。
+          // react-chartjs-2 更新 options 时是整体替换 scales，而 zoom 插件正是靠改写
+          // scale.options.min/max 记住缩放状态的——数据每秒追加一个点就会把缩放顶回去，
+          // 结果是想细看某一段时间几乎做不到。插件的双击还原会自己恢复原范围，不受影响。
+          ...(userAdjusted ? {} : { min: extent.min, max: extent.max }),
           grid: {
             color: `color-mix(in oklch, ${themeColors.border} 70%, transparent)`,
           },
@@ -181,7 +192,7 @@ export function TrafficChart({ data }: TrafficChartProps) {
         },
       },
     }),
-    [themeColors, data, extent],
+    [themeColors, data, extent, userAdjusted, markUserAdjusted],
   );
 
   return <Line data={chartData} options={options} />;

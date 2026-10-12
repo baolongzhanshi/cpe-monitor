@@ -27,6 +27,8 @@
 /src-tauri/binaries/
 /src-tauri/target/
 /backups/
+# 运行密钥只应存在于 %APPDATA%，这里补一条兜底规则防止误建在仓库里。
+runtime-secrets.*
 /tools/
 
 # misc

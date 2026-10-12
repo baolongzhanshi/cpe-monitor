@@ -6,6 +6,8 @@ export const RETENTION_MIN_DAYS = 7;
 export const RETENTION_MAX_DAYS = 3650;
 export const DEFAULT_HISTORY_RETENTION_DAYS = 90;
 export const DEFAULT_RUN_RETENTION_DAYS = 180;
+/** 资源采样是诊断数据，量级比历史流量大得多，单独用较短的固定保留期。 */
+const RESOURCE_SAMPLE_RETENTION_DAYS = 30;
 const CLEANUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 export interface DataRetentionConfig {
@@ -105,6 +107,20 @@ export function cleanupHistoricalData(force = false): DataCleanupResult {
       'DELETE FROM traffic_data WHERE timestamp < ?',
     ).run(historyCutoff);
     const deviceSnapshotsDeleted = deleteDeviceInfoSnapshotsBefore(historyCutoff);
+    // 以下几张表原先没有任何清理路径，只增不减。
+    // 资源采样尤其明显：灰度包每 60 秒写一条汇总加约九条明细，一天约 1.4 万行，
+    // 而它正是被用来做长期趋势分析的，不清理反而会把库撑大。
+    // sms_messages 是用户数据，刻意不在这里删。
+    db.prepare('DELETE FROM alert_logs WHERE triggered_at < ?').run(historyCutoff);
+    db.prepare('DELETE FROM system_logs WHERE created_at < ?').run(historyCutoff);
+    db.prepare(
+      "DELETE FROM notification_outbox WHERE status IN ('sent', 'dead') AND created_at < ?",
+    ).run(historyCutoff);
+    const resourceCutoffIso = new Date(
+      now.getTime() - RESOURCE_SAMPLE_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    db.prepare('DELETE FROM resource_samples WHERE sampled_at < ?').run(resourceCutoffIso);
+    db.prepare('DELETE FROM resource_process_samples WHERE sampled_at < ?').run(resourceCutoffIso);
     const runs = db.prepare(
       `DELETE FROM collection_runs
        WHERE COALESCE(completed_at, started_at) < ?

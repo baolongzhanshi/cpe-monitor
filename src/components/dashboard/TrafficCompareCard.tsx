@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Line } from 'react-chartjs-2';
 import { GitCompareArrows } from 'lucide-react';
 import {
@@ -68,6 +68,7 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
   const [dataB, setDataB] = useState<CompareData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const compareSeqRef = useRef(0);
 
   const fetchRange = useCallback(async (range: string): Promise<CompareData | null> => {
     const { start, end } = getDateRange(range);
@@ -95,9 +96,14 @@ function TrafficCompareCard({ className }: TrafficCompareCardProps) {
   }, []);
 
   const handleCompare = useCallback(async () => {
+    // 快速切换范围时两次请求会并发，后发的可能先返回。
+    // 用序号丢弃过期响应，否则会出现曲线是旧范围、图例已是新范围。
+    const seq = compareSeqRef.current + 1;
+    compareSeqRef.current = seq;
     setLoading(true);
     setError('');
     const [a, b] = await Promise.all([fetchRange(rangeA), fetchRange(rangeB)]);
+    if (seq !== compareSeqRef.current) return;
     setDataA(a);
     setDataB(b);
     if (!a && !b) setError('流量对比加载失败');

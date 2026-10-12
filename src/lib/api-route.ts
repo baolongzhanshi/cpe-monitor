@@ -70,10 +70,9 @@ export function withApiHandler(
         return jsonError(error.message, error.status);
       }
       console.error(fallbackMessage, error);
-      const message = error instanceof Error && error.message
-        ? error.message
-        : fallbackMessage;
-      return jsonError(message, 500);
+      // 非 ApiError 的异常只回通用文案。原始 message 里可能带内部路径、SQL 错误
+      // 或解密失败原因，非桌面部署下会直接交给未认证或低权限的调用者。
+      return jsonError(fallbackMessage, 500);
     }
   };
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Check, Loader2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useLastSaveFailed } from '@/components/settings/save-outcome-context';
 
 interface SaveButtonProps {
   saving: boolean;
@@ -18,18 +19,20 @@ interface SaveButtonProps {
  */
 export function SaveButton({ saving, onClick, label = '保存', className }: SaveButtonProps) {
   const reduce = useReducedMotion();
+  const saveFailed = useLastSaveFailed();
   const [saved, setSaved] = useState(false);
   const prevSaving = useRef(false);
 
   useEffect(() => {
-    if (prevSaving.current && !saving) {
+    // 失败时不闪：仅凭 saving 的下降沿无法区分成败，结果由设置页通过 context 广播。
+    if (prevSaving.current && !saving && !saveFailed) {
       setSaved(true);
       const timer = setTimeout(() => setSaved(false), 1600);
       prevSaving.current = saving;
       return () => clearTimeout(timer);
     }
     prevSaving.current = saving;
-  }, [saving]);
+  }, [saving, saveFailed]);
 
   return (
     <Button

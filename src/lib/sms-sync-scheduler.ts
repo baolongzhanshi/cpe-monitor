@@ -133,27 +133,32 @@ async function persistSmsMessages(messages: CpeSmsMessage[]): Promise<SmsSyncRes
       continue;
     }
 
-    // 新入站短信只写入出站队列，由队列负责投递与重试；首次导入的旧短信不推送。
+    // 入库与入队放在同一事务里，且先入库再入队。
+    // 顺序反过来、或两者不在同一事务时：入库失败会在队列里留下指向不存在短信的待发送记录；
+    // 而队列投递成功后回写 sms_messages.notified 会命中 0 行，那条短信永远停在未通知状态。
     const notified = 0;
-    if (!firstSync && sms.direction === 'inbound') {
-      enqueueSmsNotifications(sms, fingerprint);
-    }
-
-    db.prepare(`
+    const insertSms = db.prepare(`
       INSERT INTO sms_messages
         (fingerprint, message_id, phone, content, received_at, unread, direction, notified, raw_json)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      fingerprint,
-      sms.id,
-      sms.phone,
-      sms.content,
-      sms.date,
-      sms.unread ? 1 : 0,
-      sms.direction,
-      notified,
-      rawJson,
-    );
+    `);
+    db.transaction(() => {
+      insertSms.run(
+        fingerprint,
+        sms.id,
+        sms.phone,
+        sms.content,
+        sms.date,
+        sms.unread ? 1 : 0,
+        sms.direction,
+        notified,
+        rawJson,
+      );
+      // 新入站短信只写入出站队列，由队列负责投递与重试；首次导入的旧短信不推送。
+      if (!firstSync && sms.direction === 'inbound') {
+        enqueueSmsNotifications(sms, fingerprint);
+      }
+    })();
     inserted += 1;
   }
 

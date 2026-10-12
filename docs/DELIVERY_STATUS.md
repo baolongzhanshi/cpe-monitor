@@ -1,5 +1,11 @@
 # 0.3.2 交付状态
 
+> **这是一份历史快照，不代表当前交付状态。**
+> 它记录的是 0.3.2 当时的交付内容。其中的版本号、安装包文件名（该版之后已改为 `CPEMonitor_` 前缀）、
+> 验证项数与 schema 版本都已过时；文中提到的 `D:\Desktop\CPEMonitor_0.3.2_x64-setup.exe`
+> 在 2026-10-12 的安装包清理中已从桌面删除，留存只在 `backups/` 与 `CPEMonitor-发布包/`。
+> 当前版本与交付状态请看 `docs/CPE-Monitor-版本记录与后续计划.md`。
+
 更新日期：2026-10-08（北京时间）。
 
 - 本地0.3.2安装包已生成：桌面 `D:\Desktop\CPEMonitor_0.3.2_x64-setup.exe`，工作区 `installers/CPEMonitor_0.3.2_x64-setup.exe`，SHA256：`40C6CC2256FAE3BD13C04B6955EA3669CBE638FA96BF93BA198D635C3E3060EE`，70,239,121 字节。两处哈希已核对一致。

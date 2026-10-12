@@ -65,7 +65,28 @@ export function AlertRuleDialog({
               </Select>
             </FieldGroup>
             <FieldGroup label={`阈值（${getAlertMetricUnit(formData.metricType)}）`} hint={getAlertMetricHint(formData.metricType)}>
-              <Input type="number" step="any" value={String(formData.threshold)} onChange={(event) => update('threshold', Number(event.target.value))} />
+              {/*
+                用非受控输入 + 失焦提交。受控写在 type="number" 上有实际障碍：
+                用户敲 "-" 时 event.target.value 是空串，Number('') 得 0 又被写回受控值，
+                负号会被立刻吞掉——而 RSRP/RSRQ/SINR 这些指标的阈值本身就是负数，
+                敲不出来就只能配出永远成立的正数规则。
+                key 跟着指标类型走，切换指标时重新挂载并从 formData 取初值。
+              */}
+              <Input
+                key={formData.metricType}
+                type="number"
+                step="any"
+                defaultValue={formData.threshold}
+                onBlur={(event) => {
+                  const raw = event.target.value;
+                  const parsed = Number(raw);
+                  if (raw !== '' && Number.isFinite(parsed)) {
+                    update('threshold', parsed);
+                  } else {
+                    event.target.value = String(formData.threshold);
+                  }
+                }}
+              />
             </FieldGroup>
           </div>
           <FieldGroup label="静默期 (分钟)">

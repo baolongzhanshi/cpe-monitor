@@ -128,7 +128,12 @@ internal sealed class ServerHost : IDisposable
         server = Process.Start(start) ?? throw new InvalidOperationException("无法启动本机后台。");
         // 绑定到作业对象：宿主消失时由系统回收后台，覆盖崩溃和被强制结束的情况。
         job = ProcessJob.TryCreate();
-        job?.TryAssign(server);
+        // 绑定失败不能静默：这种情况下宿主崩溃或被强杀会遗留占端口的 node 进程，
+        // 只能靠下次启动的遗留清理兜底，排查时需要知道这里曾经失败过。
+        if (job is null || !job.TryAssign(server))
+        {
+            AppendHostEvent("作业对象绑定失败，已退回下次启动时清理遗留后台");
+        }
         _ = DrainErrorAsync(server.StandardError, stopping.Token);
         using var startup = CancellationTokenSource.CreateLinkedTokenSource(ct);
         startup.CancelAfter(TimeSpan.FromSeconds(60));
@@ -204,6 +209,9 @@ internal sealed class ServerHost : IDisposable
         }
         catch (OperationCanceledException) { }
         catch (IOException) { }
+        // 其它异常（例如数据目录不可写）原先会成为未观察异常被静默丢弃，
+        // 结果是 startup-error.log 根本没生成，而没人知道为什么——排查启动失败时极易误导。
+        catch (Exception error) { AppendHostEvent($"后台错误输出落盘失败：{error.Message}"); }
     }
     public void Dispose()
     {

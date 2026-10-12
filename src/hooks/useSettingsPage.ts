@@ -51,11 +51,10 @@ export function useSettingsPage() {
     || deviceInfoSync.initialLoading
     || retention.initialLoading
     || quota.initialLoading;
-  const loading = cpe.saving
-    || notifications.savingEmail
-    || notifications.savingWechat
-    || notifications.savingPushplus
-    || dailyReport.savingDailyReportPush;
+  // 各区块的保存状态各自独立，调用方按区块取自己的那个。
+  // 这里曾经聚合成一个 loading 传给多个区块，结果是保存邮件通知会让 CPE 与企微的按钮
+  // 一起转圈、保存结束后三个按钮一起闪「已保存」，而实际只保存了一个。
+  // 聚合值本身已无人使用，直接删除，避免又有人拿它当"整页保存中"用。
 
   const overviewMeta = useMemo(() => ({
     cpeConfigured: Boolean(cpe.cpeConfig.cpeUrl),
@@ -85,7 +84,6 @@ export function useSettingsPage() {
     ...quota,
     ...update,
     pageLoading,
-    loading,
     message,
     openSection,
     setOpenSection,
