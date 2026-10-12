@@ -4,6 +4,12 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 
 接手开发请先阅读 [AI 项目交接文档](docs/AI_HANDOFF.md) 与 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md)，其中列出功能、核心文件、备份规则、验证范围与已知限制。`docs/DELIVERY_STATUS.md` 是 0.3.2 的历史快照，仅供参考，不要据它判断当前交付状态。
 
+## 当前版本与远程
+
+这是原作者 [lengsukq/cpe-monitor](https://github.com/lengsukq/cpe-monitor) 的 Fork，代码托管在 [baolongzhanshi/cpe-monitor](https://github.com/baolongzhanshi/cpe-monitor)。本地克隆里 `origin` 指向上游、`personal` 指向本 Fork：**改动只推送到 `personal`，推 `origin` 会误改原作者仓库。**
+
+代码基线是版本 `0.3.19`，对应标签 [`v0.3.19`](https://github.com/baolongzhanshi/cpe-monitor/releases/tag/v0.3.19)，数据库 schema v10。这一版包含自首次上桌以来 0.1.1 到 0.3.19 的全部工作，以及一轮全量代码审查后的修复；发布说明、刻意保留的取舍与未验证项都记在 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md)。
+
 ## 功能特性
 
 - 流量实时监控 - 仪表盘展示当前流量、设备数量、信号强度
