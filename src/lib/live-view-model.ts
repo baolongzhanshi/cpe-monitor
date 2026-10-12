@@ -4,7 +4,14 @@ import type { DashboardOverviewResponse, TrafficStatsResponse } from '../types/i
 import type { TrafficHistoryPoint } from '../hooks/useTrafficHistory';
 
 export const MAX_LIVE_POINTS = 180;
-export const LIVE_STALE_AFTER_MS = 4_000;
+/**
+ * 超过这个时长没有新样本，就认为界面展示的是历史数据。
+ *
+ * 秒级实时采集的正常年龄在 1 秒以内；SSE 断开后由 2 秒轮询兜底。
+ * 取 6 秒可以容忍连续三次漏采，或两次兜底轮询外加网络延迟，
+ * 避免链路上偶发慢一拍就把界面打成过期。
+ */
+export const LIVE_STALE_AFTER_MS = 6_000;
 
 export interface LiveDashboardViewSnapshot {
   overview: DashboardOverviewResponse;
@@ -32,6 +39,35 @@ export function isLiveSampleFresh(
   if (stale || !collectedAt) return false;
   const ageMs = now - collectedAt.getTime();
   return Number.isFinite(ageMs) && ageMs >= -5_000 && ageMs <= LIVE_STALE_AFTER_MS;
+}
+
+export type LiveFreshnessState = 'paused' | 'waiting' | 'current' | 'stale';
+
+/**
+ * 实时数据新鲜度的唯一判定入口。
+ *
+ * 徽章和状态行原先各用一套规则，会出现一边写"实时 CPE 数据"、
+ * 另一边写"显示最近一次数据"的矛盾，所以把判定收敛到这里，两个组件共用结果。
+ *
+ * watchingSinceMs 是本次可见的起始时刻。刚恢复可见时，上一次采样必然早于恢复时刻，
+ * 直接按采样时间判定会立刻闪报过期；因此从恢复时刻起算，给数据留一个到达窗口。
+ * 数据正常时采样时间总晚于恢复时刻，锚点自然回落到采样时间，不受影响。
+ */
+export function readLiveFreshness(input: {
+  collectedAt: Date | null;
+  stale: boolean;
+  pageVisible: boolean;
+  watchingSinceMs: number;
+  now?: number;
+}): LiveFreshnessState {
+  const {
+    collectedAt, stale, pageVisible, watchingSinceMs, now = Date.now(),
+  } = input;
+  if (!pageVisible) return 'paused';
+  if (!collectedAt) return 'waiting';
+  if (stale) return 'stale';
+  const anchoredAt = new Date(Math.max(collectedAt.getTime(), watchingSinceMs));
+  return isLiveSampleFresh(anchoredAt, false, now) ? 'current' : 'stale';
 }
 
 function metricNumber(value: unknown): number | null {

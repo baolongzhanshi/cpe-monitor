@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  LIVE_STALE_AFTER_MS,
   MAX_LIVE_POINTS,
   appendLiveHistoryPoint,
   createLiveHistoryPoint,
@@ -8,6 +9,7 @@ import {
   isLiveSampleFresh,
   isOlderLiveSample,
   mergeLiveChartHistory,
+  readLiveFreshness,
   type LiveDashboardViewSnapshot,
 } from '../src/lib/live-view-model.ts';
 
@@ -81,14 +83,45 @@ test('长时间每秒更新仅保留最近 180 条采样', () => {
   assert.equal(points.at(-1)?.downloadBps, 999);
 });
 
-test('4 秒以上旧样本及失败样本不显示绿色实时标记', () => {
+test('超过阈值或采集失败的样本不显示绿色实时标记', () => {
   const collectedAt = getLiveSampleTime(makeSnapshot());
   const time = collectedAt!.getTime();
-  assert.equal(isLiveSampleFresh(collectedAt, false, time + 3999), true);
-  assert.equal(isLiveSampleFresh(collectedAt, false, time + 4001), false);
+  assert.equal(isLiveSampleFresh(collectedAt, false, time + LIVE_STALE_AFTER_MS - 1), true);
+  assert.equal(isLiveSampleFresh(collectedAt, false, time + LIVE_STALE_AFTER_MS + 1), false);
   assert.equal(isLiveSampleFresh(collectedAt, true, time + 100), false);
   assert.equal(isLiveSampleFresh(null, false, time), false);
-  assert.equal(isLiveSampleFresh(new Date(time + 6000), false, time), false);
+  // 明显早于本机的采样时间戳按时钟偏差处理，不算新鲜。
+  assert.equal(isLiveSampleFresh(new Date(time + 6_000), false, time), false);
+});
+
+test('新鲜度判定把暂停、等待、过期和正常区分开', () => {
+  const now = 1_000_000_000_000;
+  const fresh = new Date(now - 500);
+  const old = new Date(now - LIVE_STALE_AFTER_MS - 1);
+  const base = {
+    collectedAt: fresh, stale: false, pageVisible: true, watchingSinceMs: now - 60_000, now,
+  };
+
+  assert.equal(readLiveFreshness(base), 'current');
+  assert.equal(readLiveFreshness({ ...base, pageVisible: false }), 'paused');
+  assert.equal(readLiveFreshness({ ...base, collectedAt: null }), 'waiting');
+  assert.equal(readLiveFreshness({ ...base, stale: true }), 'stale');
+  assert.equal(readLiveFreshness({ ...base, collectedAt: old }), 'stale');
+});
+
+test('刚恢复可见时旧样本不立即判为过期，但一直等不到数据仍会过期', () => {
+  const now = 1_000_000_000_000;
+  const old = new Date(now - 30_000);
+  const common = {
+    collectedAt: old, stale: false, pageVisible: true, now,
+  };
+
+  // 刚恢复可见：从恢复时刻起算，给数据留一个到达窗口。
+  assert.equal(readLiveFreshness({ ...common, watchingSinceMs: now - 100 }), 'current');
+  // 恢复后一直没等到新数据：超过阈值仍然判过期。
+  assert.equal(readLiveFreshness({ ...common, watchingSinceMs: now - LIVE_STALE_AFTER_MS - 1 }), 'stale');
+  // 一直在看、数据确实旧了：照常判过期。
+  assert.equal(readLiveFreshness({ ...common, watchingSinceMs: now - 60_000 }), 'stale');
 });
 
 test('合并历史与实时序列时末尾只追加当前速率一个点，且不篡改原历史', () => {

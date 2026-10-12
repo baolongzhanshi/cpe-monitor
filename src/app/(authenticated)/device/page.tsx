@@ -20,6 +20,7 @@ import OnlineDevicesTable from '@/components/device/OnlineDevicesTable';
 import SignalMetricsOverview from '@/components/device/SignalMetricsOverview';
 import DeviceQuickNav from '@/components/device/DeviceQuickNav';
 import { useDevicePage } from '@/hooks/useDevicePage';
+import { useLiveFreshness } from '@/hooks/useLiveFreshness';
 import { getDisplayValue } from '@/lib/device-display';
 
 function parseMetric(value: unknown): number | null {
@@ -49,6 +50,7 @@ export default function DevicePage() {
     lastRefreshAt,
     lastRefreshStale,
   } = useDevicePage();
+  const freshness = useLiveFreshness(lastRefreshAt, lastRefreshStale);
 
   if (loading) {
     return <LoadingBlock />;
@@ -94,8 +96,7 @@ export default function DevicePage() {
             <RefreshIndicator
               sseStatus={sseStatus}
               lastRefreshAt={lastRefreshAt}
-              lastRefreshStale={lastRefreshStale}
-              collectionIntervalMs={2_000}
+              freshness={freshness}
             />
             <RefreshButton onClick={() => { void refreshDevicePage(); }} />
           </div>

@@ -26,6 +26,7 @@ import TrafficCompareCard from '@/components/dashboard/TrafficCompareCard';
 import TrafficStatsPanel from '@/components/dashboard/TrafficStatsPanel';
 import TrafficTrendCard from '@/components/dashboard/TrafficTrendCard';
 import { formatBytesPerSecond } from '@/lib/format';
+import { useLiveFreshness } from '@/hooks/useLiveFreshness';
 import {
   useDashboardSlow,
   useLiveHistory,
@@ -70,6 +71,10 @@ function LiveTop() {
   const { trafficStats } = useLiveRates();
   const { metricHistory, chartHistory } = useLiveHistory();
   const { lastRefreshAt, lastRefreshStale, sseStatus, overviewError, dataError, refreshing, collecting } = useLiveMeta();
+  // 徽章与状态行共用这一处判定，避免两者对同一件事给出相反说法。
+  const freshness = useLiveFreshness(lastRefreshAt, lastRefreshStale);
+  // 页面暂停只说明显示停了，数据来源仍是实时 CPE，所以徽章只在真过期或还没数据时才改口。
+  const badgeShowsLive = freshness !== 'stale' && freshness !== 'waiting';
   const { startDate, timeRange, setTimeRange, refreshDashboard, collectNow } = useDashboardSlow();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportData, setReportData] = useState<CollectionReportData | null>(null);
@@ -95,15 +100,15 @@ function LiveTop() {
               <RefreshIndicator
                 sseStatus={sseStatus}
                 lastRefreshAt={lastRefreshAt}
-                lastRefreshStale={lastRefreshStale}
+                freshness={freshness}
               />
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge
-                variant={overview?.source === 'cpe' && !lastRefreshStale ? 'default' : 'secondary'}
+                variant={overview?.source === 'cpe' && badgeShowsLive ? 'default' : 'secondary'}
                 className="rounded-full px-3 py-1"
               >
-                {lastRefreshStale ? '最近一次数据' : overview?.source === 'cpe' ? '实时 CPE 数据' : '数据库兜底数据'}
+                {!badgeShowsLive ? '最近一次数据' : overview?.source === 'cpe' ? '实时 CPE 数据' : '数据库兜底数据'}
               </Badge>
               {/* 实时推送正常时不再占用按钮位置；断线或数据过期才显示手动刷新。 */}
               {lastRefreshStale || sseStatus !== 'connected' ? (
