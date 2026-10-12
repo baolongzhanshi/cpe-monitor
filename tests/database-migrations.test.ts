@@ -45,6 +45,7 @@ class FakeDatabase implements SqliteDatabase {
   userVersion = 0;
   execCount = 0;
   settings = new Map<string, string>();
+  tables = new Set<string>();
   columns = new Map<string, Set<string>>([
     ['traffic_data', new Set(['id', 'timestamp', 'upload_bytes', 'download_bytes'])],
     ['device_data', new Set(['id', 'timestamp', 'device_mac'])],
@@ -56,6 +57,9 @@ class FakeDatabase implements SqliteDatabase {
 
   exec(sql: string): SqliteDatabase {
     this.execCount += 1;
+    for (const match of sql.matchAll(/CREATE TABLE IF NOT EXISTS\s+(\w+)/gi)) {
+      this.tables.add(match[1]);
+    }
     const alterMatches = sql.matchAll(/ALTER TABLE\s+(\w+)\s+ADD COLUMN\s+(\w+)/gi);
     for (const match of alterMatches) {
       const columns = this.columns.get(match[1]) || new Set<string>();
@@ -80,15 +84,17 @@ class FakeDatabase implements SqliteDatabase {
 
 test('database migrations advance once and remain idempotent', () => {
   const database = new FakeDatabase();
-  assert.equal(runDatabaseMigrations(database), 9);
-  assert.equal(database.userVersion, 9);
+  assert.equal(runDatabaseMigrations(database), 10);
+  assert.equal(database.userVersion, 10);
   assert.ok(database.columns.get('traffic_data')?.has('collection_id'));
   assert.ok(database.columns.get('traffic_data')?.has('rsrp'));
   assert.ok(database.columns.get('device_data')?.has('raw_json'));
   assert.ok(database.columns.get('alert_rules')?.has('notify_pushplus'));
+  assert.ok(database.tables.has('resource_samples'));
+  assert.ok(database.tables.has('resource_process_samples'));
 
   const execCount = database.execCount;
-  assert.equal(runDatabaseMigrations(database), 9);
+  assert.equal(runDatabaseMigrations(database), 10);
   assert.equal(database.execCount, execCount);
 });
 

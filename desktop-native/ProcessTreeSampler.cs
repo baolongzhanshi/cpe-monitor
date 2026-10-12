@@ -76,6 +76,18 @@ internal sealed class ProcessTreeSampler : IDisposable
                 handles = snapshot.Handles,
                 threads = snapshot.Threads,
                 uptimeSeconds = snapshot.UptimeSeconds,
+                // 单进程明细，用于把增长定位到具体进程。
+                processes = snapshot.Processes.Select(entry => new
+                {
+                    processId = entry.ProcessId,
+                    parentProcessId = entry.ParentProcessId,
+                    processName = entry.Name,
+                    workingSetBytes = entry.WorkingSet,
+                    privateBytes = entry.Private,
+                    handles = entry.Handles,
+                    threads = entry.Threads,
+                    cpuSeconds = entry.CpuSeconds,
+                }).ToArray(),
             });
         }
         catch (Exception error) when (error is HttpRequestException or InvalidOperationException
@@ -83,9 +95,14 @@ internal sealed class ProcessTreeSampler : IDisposable
         finally { sampling = false; }
     }
 
+    /// <summary>单个进程的明细，用于把资源增长定位到具体进程。</summary>
+    private readonly record struct ProcessEntry(
+        int ProcessId, int ParentProcessId, string Name, long WorkingSet,
+        long Private, long Handles, long Threads, double CpuSeconds);
+
     private readonly record struct TreeSnapshot(
         int ProcessCount, long WorkingSet, long Private, double CpuSeconds,
-        long Handles, long Threads, double UptimeSeconds);
+        long Handles, long Threads, double UptimeSeconds, IReadOnlyList<ProcessEntry> Processes);
 
     private static TreeSnapshot SumTree()
     {
@@ -116,16 +133,31 @@ internal sealed class ProcessTreeSampler : IDisposable
             double cpuSeconds = 0;
             var count = 0;
             var oldestStart = DateTime.MaxValue;
+            var entries = new List<ProcessEntry>();
             foreach (var id in treeIds)
             {
                 if (!byId.TryGetValue(id, out var process)) continue;
                 try
                 {
-                    workingSet += process.WorkingSet64;
-                    privateBytes += process.PrivateMemorySize64;
-                    handles += process.HandleCount;
-                    threads += process.Threads.Count;
-                    cpuSeconds += process.TotalProcessorTime.TotalSeconds;
+                    var processWorkingSet = process.WorkingSet64;
+                    var processPrivate = process.PrivateMemorySize64;
+                    var processHandles = process.HandleCount;
+                    var processThreads = process.Threads.Count;
+                    var processCpuSeconds = process.TotalProcessorTime.TotalSeconds;
+                    workingSet += processWorkingSet;
+                    privateBytes += processPrivate;
+                    handles += processHandles;
+                    threads += processThreads;
+                    cpuSeconds += processCpuSeconds;
+                    entries.Add(new ProcessEntry(
+                        process.Id,
+                        parents.TryGetValue(process.Id, out var parentId) ? parentId : 0,
+                        TryGetName(process),
+                        processWorkingSet,
+                        processPrivate,
+                        processHandles,
+                        processThreads,
+                        Math.Round(processCpuSeconds, 3)));
                     if (process.StartTime < oldestStart) oldestStart = process.StartTime;
                     count += 1;
                 }
@@ -136,11 +168,26 @@ internal sealed class ProcessTreeSampler : IDisposable
             var uptime = oldestStart == DateTime.MaxValue
                 ? 0
                 : Math.Round((DateTime.Now - oldestStart).TotalSeconds, 1);
-            return new TreeSnapshot(count, workingSet, privateBytes, cpuSeconds, handles, threads, uptime);
+            return new TreeSnapshot(count, workingSet, privateBytes, cpuSeconds, handles, threads, uptime, entries);
         }
         finally
         {
             foreach (var process in all) process.Dispose();
+        }
+    }
+
+    /// <summary>进程可能刚好退出，名字取不到时记 unknown，不让整次采样失败。</summary>
+    private static string TryGetName(Process process)
+    {
+        try
+        {
+            var name = process.ProcessName;
+            return string.IsNullOrWhiteSpace(name) ? "unknown" : name;
+        }
+        catch (Exception error) when (error is InvalidOperationException
+            or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return "unknown";
         }
     }
 

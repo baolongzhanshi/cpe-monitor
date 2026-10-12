@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, initializeDatabase } from '@/lib/db';
+import { sanitizeProcesses } from '@/lib/resource-sample-payload';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,6 +13,7 @@ interface SamplePayload {
   handles?: number;
   threads?: number;
   uptimeSeconds?: number;
+  processes?: unknown;
 }
 
 function nonNegative(value: unknown): number | null {
@@ -46,22 +48,47 @@ export async function POST(request: Request): Promise<NextResponse> {
     ? body.sampledAt
     : new Date().toISOString();
 
+  const processes = sanitizeProcesses(body.processes);
+
   try {
-    db.prepare(`
+    const insertSample = db.prepare(`
       INSERT INTO resource_samples
         (sampled_at, source, process_count, working_set_bytes, private_bytes,
          cpu_percent, handles, threads, uptime_seconds)
       VALUES (?, 'desktop-host', ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      sampledAt,
-      nonNegative(body.processCount) ?? 0,
-      workingSet,
-      privateBytes,
-      nonNegative(body.cpuPercent) ?? 0,
-      nonNegative(body.handles) ?? 0,
-      nonNegative(body.threads) ?? 0,
-      nonNegative(body.uptimeSeconds) ?? 0,
-    );
+    `);
+    const insertProcess = db.prepare(`
+      INSERT INTO resource_process_samples
+        (sampled_at, process_id, parent_process_id, process_name,
+         working_set_bytes, private_bytes, handles, threads, cpu_seconds)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    // 汇总与明细必须同时落库，否则按 sampled_at 关联时会出现半条采样。
+    db.transaction(() => {
+      insertSample.run(
+        sampledAt,
+        nonNegative(body.processCount) ?? 0,
+        workingSet,
+        privateBytes,
+        nonNegative(body.cpuPercent) ?? 0,
+        nonNegative(body.handles) ?? 0,
+        nonNegative(body.threads) ?? 0,
+        nonNegative(body.uptimeSeconds) ?? 0,
+      );
+      for (const process of processes) {
+        insertProcess.run(
+          sampledAt,
+          process.processId,
+          process.parentProcessId,
+          process.processName,
+          process.workingSetBytes,
+          process.privateBytes,
+          process.handles,
+          process.threads,
+          process.cpuSeconds,
+        );
+      }
+    })();
   } catch {
     return NextResponse.json({ error: '资源样本写入失败' }, { status: 503 });
   }

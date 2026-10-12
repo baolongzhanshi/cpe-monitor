@@ -449,6 +449,32 @@ const migrations: Array<{ version: number; migrate: Migration }> = [
       for (const [key, value] of defaults) insertDefault.run(key, value);
     },
   },
+  {
+    version: 10,
+    migrate(database) {
+      // 单进程明细：只由灰度版宿主写入，用于定位资源增长发生在哪个进程。
+      // 与 resource_samples 用同一个 sampled_at 关联，不建外键，避免写入路径变复杂。
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS resource_process_samples (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sampled_at TEXT NOT NULL,
+          process_id INTEGER,
+          parent_process_id INTEGER,
+          process_name TEXT NOT NULL,
+          working_set_bytes INTEGER,
+          private_bytes INTEGER,
+          handles INTEGER,
+          threads INTEGER,
+          cpu_seconds REAL,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_resource_process_samples_time
+        ON resource_process_samples (sampled_at);
+        CREATE INDEX IF NOT EXISTS idx_resource_process_samples_name
+        ON resource_process_samples (process_name, sampled_at);
+      `);
+    },
+  },
 ];
 
 function readSchemaVersion(database: SqliteDatabase): number {

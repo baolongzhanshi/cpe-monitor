@@ -7,7 +7,7 @@ ManifestDPIAware true
 !include "x64.nsh"
 
 !ifndef PRODUCT_VERSION
-  !define PRODUCT_VERSION "0.3.15"
+  !define PRODUCT_VERSION "0.3.16"
 !endif
 !ifndef INPUT_DIR
   !define INPUT_DIR "native-dist\payload"
