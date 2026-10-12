@@ -8,7 +8,7 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 
 这是原作者 [lengsukq/cpe-monitor](https://github.com/lengsukq/cpe-monitor) 的 Fork，代码托管在 [baolongzhanshi/cpe-monitor](https://github.com/baolongzhanshi/cpe-monitor)。本地克隆里 `origin` 指向上游、`personal` 指向本 Fork：**改动只推送到 `personal`，推 `origin` 会误改原作者仓库。**
 
-代码基线是版本 `0.3.19`，对应标签 [`v0.3.19`](https://github.com/baolongzhanshi/cpe-monitor/releases/tag/v0.3.19)，数据库 schema v10。这一版包含自首次上桌以来 0.1.1 到 0.3.19 的全部工作，以及一轮全量代码审查后的修复；发布说明、刻意保留的取舍与未验证项都记在 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md)。
+代码基线是版本 `1.0.0`，对应标签 [`v1.0.0`](https://github.com/baolongzhanshi/cpe-monitor/releases/tag/v1.0.0)，数据库 schema v10。这是本仓库的首次发布：内容涵盖 0.1.1 到 0.3.19 期间的全部开发与修复，以及一轮全量代码审查的结论。那段时间的逐版记录、刻意保留的取舍与未验证项都保留在 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md) 里。
 
 ## 功能特性
 
