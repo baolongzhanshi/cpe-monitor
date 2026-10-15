@@ -8,7 +8,7 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 
 这是原作者 [lengsukq/cpe-monitor](https://github.com/lengsukq/cpe-monitor) 的 Fork，代码托管在 [baolongzhanshi/cpe-monitor](https://github.com/baolongzhanshi/cpe-monitor)。本地克隆里 `origin` 指向上游、`personal` 指向本 Fork：**改动只推送到 `personal`，推 `origin` 会误改原作者仓库。**
 
-代码基线是版本 `1.0.0`，对应标签 [`v1.0.0`](https://github.com/baolongzhanshi/cpe-monitor/releases/tag/v1.0.0)，数据库 schema v10。这是本仓库的首次发布：内容涵盖 0.1.1 到 0.3.19 期间的全部开发与修复，以及一轮全量代码审查的结论。那段时间的逐版记录、刻意保留的取舍与未验证项都保留在 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md) 里。
+当前版本 `1.1.0`，对应标签 [`v1.1.0`](https://github.com/baolongzhanshi/cpe-monitor/releases/tag/v1.1.0)，数据库 schema v10。`1.0.0`（[标签](https://github.com/baolongzhanshi/cpe-monitor/releases/tag/v1.0.0)）是本仓库的首次发布，内容涵盖 0.1.1 到 0.3.19 期间的全部开发与修复，以及一轮全量代码审查的结论；`1.1.0` 在此基础上新增开机自启。逐版记录、刻意保留的取舍与未验证项都保留在 [版本记录与后续计划](docs/CPE-Monitor-版本记录与后续计划.md) 里。
 
 ## 功能特性
 
@@ -26,6 +26,7 @@ H153 CPE 流量监控、告警通知、每日报告系统。
 - 主题色定制 - 10 组预设色板 + 自定义 Hue 滑杆，全站品牌色即时切换
 - 精致动效 - framer-motion 页面过渡、卡片入场、数字滚动、布局动画
 - 多维图表 - 环形图、柱状图、面积图，覆盖流量、告警、短信、报告等场景
+- 开机自启 - 默认随 Windows 启动，设置页可关闭；卸载时自动清理启动项
 
 ## 技术栈
 
