@@ -16,6 +16,7 @@ import { SaveOutcomeProvider } from '@/components/settings/save-outcome-context'
 import { CpeConnectionSection } from '@/components/settings/CpeConnectionSection';
 import { SmsSyncSection } from '@/components/settings/SmsSyncSection';
 import { DeviceInfoSyncSection } from '@/components/settings/DeviceInfoSyncSection';
+import { AutoStartSection } from '@/components/settings/AutoStartSection';
 import { DataRetentionSection } from '@/components/settings/DataRetentionSection';
 import { DataQuotaSection } from '@/components/settings/DataQuotaSection';
 import { DataBackupSection } from '@/components/settings/DataBackupSection';
@@ -179,6 +180,10 @@ export default function SettingsPage() {
             syncingDeviceInfo={settings.syncingDeviceInfo}
             onSave={() => { void settings.saveDeviceInfoSyncConfig(); }}
             onSyncNow={() => { void settings.runDeviceInfoSyncNow(); }}
+          />
+          <AutoStartSection
+            open={settings.openSection === 'autostart'}
+            onOpenChange={(open) => settings.setOpenSection(open ? 'autostart' : null)}
           />
           <DataRetentionSection
             open={settings.openSection === 'retention'}

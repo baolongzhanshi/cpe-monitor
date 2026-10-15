@@ -180,7 +180,7 @@ internal sealed class ServerHost : IDisposable
         }
     }
 
-    private static void AppendHostEvent(string message)
+    internal static void AppendHostEvent(string message)
     {
         try
         {

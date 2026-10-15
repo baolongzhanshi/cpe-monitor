@@ -7,7 +7,8 @@ export type SettingsSectionId =
   | 'email'
   | 'wechat'
   | 'pushplus'
-  | 'reportPush';
+  | 'reportPush'
+  | 'autostart';
 
 export interface CpeConfigForm {
   cpeUrl: string;

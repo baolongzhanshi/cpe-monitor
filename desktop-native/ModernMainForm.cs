@@ -70,19 +70,43 @@ internal sealed class ModernMainForm : Form
             core.Settings.IsGeneralAutofillEnabled = false;
             await core.AddScriptToExecuteOnDocumentCreatedAsync("window.__CPE_MONITOR_DESKTOP__ = true; window.__CPE_MONITOR_VISIBLE__ = true;");
             if (_disposed) return;
-            // 页面会汇报实际生效的主题；标题栏跟随页面，页面跟随系统时即等于跟随系统。
+            // 页面 → 宿主的两类请求都走这里：页面汇报实际生效的主题、查询或切换开机自启。
+            void ReplyAutoStartState(bool enabled)
+            {
+                try { core.PostWebMessageAsJson(JsonSerializer.Serialize(new { type = "autostart-state", enabled })); }
+                catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException) { }
+            }
             core.WebMessageReceived += (_, args) =>
             {
                 try
                 {
                     using var message = JsonDocument.Parse(args.WebMessageAsJson);
                     var root = message.RootElement;
-                    if (root.TryGetProperty("type", out var type) && type.GetString() == "theme"
-                        && root.TryGetProperty("dark", out var dark)
-                        && (dark.ValueKind == JsonValueKind.True || dark.ValueKind == JsonValueKind.False))
+                    if (!root.TryGetProperty("type", out var type)) return;
+                    switch (type.GetString())
                     {
-                        _pageDarkTheme = dark.GetBoolean();
-                        ApplyWindowTheme();
+                        // 页面跟随系统时，标题栏跟随页面即等于跟随系统。
+                        case "theme":
+                            if (root.TryGetProperty("dark", out var dark)
+                                && (dark.ValueKind == JsonValueKind.True || dark.ValueKind == JsonValueKind.False))
+                            {
+                                _pageDarkTheme = dark.GetBoolean();
+                                ApplyWindowTheme();
+                            }
+                            break;
+
+                        case "autostart-query":
+                            ReplyAutoStartState(AutoStart.IsEnabled());
+                            break;
+
+                        case "autostart":
+                            if (root.TryGetProperty("enabled", out var enabled)
+                                && (enabled.ValueKind == JsonValueKind.True || enabled.ValueKind == JsonValueKind.False))
+                            {
+                                // Apply 内部会回读 Run 键：注册表写不进去时返回 false，页面按真实状态显示。
+                                ReplyAutoStartState(AutoStart.Apply(enabled.GetBoolean()));
+                            }
+                            break;
                     }
                 }
                 catch (JsonException) { }

@@ -8,6 +8,7 @@ import {
   Mail,
   MessageSquareText,
   Palette,
+  Power,
   RefreshCw,
   Send,
   ScrollText,
@@ -72,6 +73,13 @@ export function SettingsSidebar({
             label="设备信息"
             detail="长期入库"
             onClick={() => onOpenSection('deviceInfo')}
+          />
+          <SettingsNav
+            href="#autostart"
+            icon={<Power className="h-3.5 w-3.5" />}
+            label="开机自启"
+            detail="随 Windows 启动"
+            onClick={() => onOpenSection('autostart')}
           />
           <SettingsNav
             href="#retention"

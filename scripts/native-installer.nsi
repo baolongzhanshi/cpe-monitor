@@ -7,7 +7,7 @@ ManifestDPIAware true
 !include "x64.nsh"
 
 !ifndef PRODUCT_VERSION
-  !define PRODUCT_VERSION "1.0.0"
+  !define PRODUCT_VERSION "1.1.0"
 !endif
 !ifndef INPUT_DIR
   !define INPUT_DIR "native-dist\payload"
@@ -142,6 +142,8 @@ Section "CPE Monitor" SEC_MAIN
     SetErrorLevel 2
     Abort
   install_directory_ready:
+  ; 开机自启交给宿主管理（desktop-native/AutoStart.cs）。安装器写的话分不清
+  ; "用户主动关掉了"和"这个功能刚引入还没配过"，升级时会把用户的关闭选择覆盖掉。
   SetOutPath "$INSTDIR"
   ; 正式版安装时清掉可能残留的灰度标记，避免从灰度版回退后仍处于灰度状态。
   Delete "$INSTDIR\resources\server\canary.flag"
@@ -192,6 +194,8 @@ Section "Uninstall"
   Delete "$DESKTOP\CPE Monitor.lnk"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\CPE Monitor"
   DeleteRegKey HKCU "Software\CPE Monitor"
+  ; 清掉开机自启项，否则卸载后会残留一条指向已删除 exe 的启动项。
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "CPE Monitor"
   ; 用户数据在 %APPDATA%\com.cpeye.monitor，卸载时保留。
   Delete "$INSTDIR\uninstall.exe"
   Delete "$INSTDIR\.cpe-monitor-install"

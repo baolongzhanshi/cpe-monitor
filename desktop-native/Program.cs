@@ -18,6 +18,8 @@ internal static class Program
         }
         try
         {
+            // 让开机自启与用户偏好对齐：从未选择过就按默认开启写一次，选过则只维护路径。
+            AutoStart.EnsureConfigured();
             using var context = new NativeApplicationContext();
             Application.Run(context);
             return 0;
